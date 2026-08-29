@@ -52,6 +52,12 @@ Everything is one Next.js codebase. There is no separate API server.
 | **Postgres functions** | Anything that must be atomic. Called via RPC. |
 | **RLS** | The backstop. Assume every other layer has a bug. |
 
+The database layer is tested by applying the real migration files to PGlite —
+Postgres compiled to WebAssembly — so `request_booking()` under test is the
+same function that runs in production. Each call runs in its own transaction
+with `set local role` and JWT claims set the way PostgREST sets them, which
+makes RLS testable as it actually behaves rather than as it is intended to.
+
 Phase 7 adds Android and iOS. That is the reason business logic stays
 server-side and in the database: the mobile apps re-use it rather than
 reimplementing it.
@@ -62,22 +68,32 @@ reimplementing it.
 
 ```
 app/
-  (public)/      search, departure detail, operator profiles
-  (passenger)/   my rides, booking detail, ratings
-  (operator)/    setup, bookings queue, departures, fleet
+  (public)/      search, departure detail, operator profiles, sign in
+  (passenger)/   my rides, booking detail, profile, ratings
+  (operator)/    setup, bookings queue, departures, fleet, team
   (driver)/      today, manifest
   (admin)/       operator vetting, cities, subscriptions
-  api/           route handlers (manifest CSV export, webhooks)
+  api/           manifest CSV export, the daily housekeeping job
+components/      presentational primitives and shared form plumbing
 lib/
-  supabase/      client, server client, generated types
-  booking/       fare calculation, capacity rules, status transitions
-  operator/      routes, schedules, departure generation
+  supabase/      clients (request-scoped, browser, service-role), types
+  auth/          session, role routing, auth actions
+  booking/       fares, capacity, search, booking and departure-day actions
+  operator/      setup actions
   incity/        Phase 6 — isolated
   validation/    zod schemas
+  notify.ts      the one seam every notification goes through
 supabase/
-  migrations/    numbered SQL migrations
-  functions/     Postgres functions (request_booking, etc.)
+  migrations/    numbered SQL — schema, RLS, and every Postgres function
+  tests/         the migrations, run against a real Postgres
 ```
+
+**Postgres functions live in `migrations/`, not in `functions/`.** A function
+is schema, and schema has to replay in order onto a fresh database. If the
+canonical copy lived elsewhere, `supabase db push` would apply the migrations
+and silently skip the functions, and a new environment would come up missing
+exactly the pieces that guarantee correctness. `supabase/functions/README.md`
+is the index of which migration defines what.
 
 Two rules about these boundaries:
 
@@ -277,6 +293,20 @@ by a trigger, so an operator cannot activate or unsuspend itself.
 2. **Every operator-scoped query also filters by membership explicitly.** A bug
    in one layer must not leak another operator's bookings.
 3. **The service-role key is server-only** and never reaches the client bundle.
+4. **Two columns are guarded by triggers, not policies.** RLS governs rows, not
+   columns, so a user permitted to update their own row is permitted to update
+   every column of it. `profiles.platform_role` and `operators.status` are the
+   two that must not work that way — self-granted admin and self-vetting
+   respectively — and each has a `before update` trigger that refuses the
+   change unless it comes from a platform admin or the service role. The
+   privilege escalation this closes was live until the database tests caught
+   it.
+5. **Functions are granted deliberately.** Postgres grants `EXECUTE` to
+   `PUBLIC` by default and Supabase exposes everything in `public` as an RPC
+   endpoint, so a new function is internet-reachable the moment it exists.
+   `20260829000008_function_grants.sql` revokes that and grants per role;
+   `supabase/tests/grants.test.ts` fails the next time one is added without a
+   grant.
 
 **What an operator sees when approving:** passenger name, phone, gender if
 given, photo if given, accommodation notes, the free-text request, and platform
@@ -314,12 +344,12 @@ Each phase should be usable before the next begins.
 
 | Phase | Scope | State |
 |---|---|---|
-| **0** | Supabase project, schema, RLS, auth (Google + email/password), profiles, role routing | schema and RLS baseline written |
-| **1** | Admin: vet and activate operators, manage cities | not started |
-| **2** | Operator setup: stops, routes, fares, schedules, vehicles, drivers | not started |
-| **3** | Departure generation (rolling 30 days) and passenger search | not started |
-| **4** | Booking: the hold, `request_booking()`, approve/decline, cancellation, email | not started |
-| **5** | Departure day: vehicle assignment, driver dashboard, manifest, completion, payment confirmation, ratings, red flags | not started |
+| **0** | Supabase project, schema, RLS, auth (Google + email/password), profiles, role routing | **built** |
+| **1** | Admin: vet and activate operators, manage cities | **built** |
+| **2** | Operator setup: stops, routes, fares, schedules, vehicles, drivers | **built** |
+| **3** | Departure generation (rolling 30 days) and passenger search | **built** |
+| **4** | Booking: the hold, `request_booking()`, approve/decline, cancellation, email | **built** |
+| **5** | Departure day: vehicle assignment, driver dashboard, manifest, completion, payment confirmation, ratings, red flags | **built** |
 | **6** | In-city add-on: zones, checkout add-on, separate approval | tables only |
 | **7** | Subscription tracking, then mobile apps | tables only |
 
@@ -340,11 +370,14 @@ matching algorithm, driver-posted rides, and multi-operator connecting trips
 - **Notifications.** MVP is email (Resend) plus an in-app list. Because a hold
   expires in an hour, SMS may prove necessary for approval alerts — revisit
   after the first operator is live. Build behind a small `notify()` abstraction
-  so adding a channel is one implementation, not a refactor. No notifications
-  table exists yet.
-- **Departure generation.** Rolling 30-day window from a scheduled job. If
-  free-tier scheduling proves awkward, generate lazily on first search for a
-  date instead.
+  so adding a channel is one implementation, not a refactor. `lib/notify.ts` is
+  that seam: without a Resend key it logs rather than silently doing nothing.
+  No notifications table exists yet, so the in-app list is still unbuilt.
+- **Departure generation.** Rolling 30-day window, generated by `/api/cron` on
+  a daily Vercel schedule, and again whenever an operator saves a timetable
+  entry so departures appear immediately. `generate_departures()` is
+  idempotent, so a missed run costs nothing. If free-tier scheduling proves
+  awkward, the fallback is to generate lazily on the first search for a date.
 - **Subscription billing.** Recorded in-app, collected off-platform by
   e-transfer at launch. Automate only when operator count justifies it.
 - **Licensing and insurance.** Ontario licensing and commercial passenger
