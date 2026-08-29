@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
 import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
+import { dynamicRoute, externalUrl } from '@/lib/routes';
 import { getViewer } from '@/lib/auth/session';
 import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
 import { createClient } from '@/lib/supabase/server';
@@ -31,7 +32,7 @@ export async function signInWithPassword(
 
   const viewer = await getViewer();
   const fallback = viewer ? landingPathFor(viewer) : '/';
-  redirect(safeRedirectPath(parsed.data.next, fallback));
+  redirect(dynamicRoute(safeRedirectPath(parsed.data.next, fallback)));
 }
 
 export async function signUpWithPassword(
@@ -63,7 +64,7 @@ export async function signUpWithPassword(
   }
 
   // Signup asks for nothing else, so the next stop is the profile.
-  redirect(`/profile?next=${encodeURIComponent(safeRedirectPath(parsed.data.next, '/'))}`);
+  redirect(dynamicRoute(`/profile?next=${encodeURIComponent(safeRedirectPath(parsed.data.next, '/'))}`));
 }
 
 export async function signInWithGoogle(formData: FormData): Promise<void> {
@@ -76,7 +77,7 @@ export async function signInWithGoogle(formData: FormData): Promise<void> {
   });
 
   if (error || !data.url) redirect('/sign-in?error=google');
-  redirect(data.url);
+  redirect(externalUrl(data.url));
 }
 
 export async function signOut(): Promise<void> {
@@ -110,7 +111,7 @@ export async function saveProfile(_prev: FormState, formData: FormData): Promise
 
   revalidatePath('/profile');
   const next = formData.get('next')?.toString();
-  if (next) redirect(safeRedirectPath(next, '/'));
+  if (next) redirect(dynamicRoute(safeRedirectPath(next, '/')));
 
   return succeed('Your details are saved.');
 }

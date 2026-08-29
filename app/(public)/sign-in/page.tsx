@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { SignInForm } from './sign-in-form';
 import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
 import { getViewer } from '@/lib/auth/session';
+import { dynamicRoute } from '@/lib/routes';
 import { Alert, Card } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Sign in' };
@@ -16,7 +17,7 @@ export default async function SignInPage({
 }) {
   const params = await searchParams;
   const viewer = await getViewer();
-  if (viewer) redirect(safeRedirectPath(params.next, landingPathFor(viewer)));
+  if (viewer) redirect(dynamicRoute(safeRedirectPath(params.next, landingPathFor(viewer))));
 
   const next = safeRedirectPath(params.next, '/');
 

@@ -672,6 +672,48 @@ export interface Database {
         Args: { p_operator_id?: string | null; p_days?: number };
         Returns: number;
       };
+      departure_leg_loads: {
+        Args: { p_departure_ids: string[] };
+        Returns: { departure_id: string; leg_start: number; seats_taken: number }[];
+      };
+      request_booking: {
+        Args: {
+          p_departure_id: string;
+          p_from_stop_id: string;
+          p_to_stop_id: string;
+          p_seats: number;
+          p_luggage_count: number;
+          p_passenger_note: string | null;
+        };
+        Returns: string;
+      };
+      approve_booking: { Args: { p_booking_id: string }; Returns: undefined };
+      decline_booking: { Args: { p_booking_id: string }; Returns: undefined };
+      cancel_booking: { Args: { p_booking_id: string }; Returns: undefined };
+      expire_stale_holds: { Args: Record<string, never>; Returns: number };
+      assign_booking_vehicle: {
+        Args: { p_booking_id: string; p_vehicle_id: string | null };
+        Returns: undefined;
+      };
+      complete_departure: { Args: { p_departure_id: string }; Returns: number };
+      mark_no_show: { Args: { p_booking_id: string }; Returns: undefined };
+      confirm_payment_as_passenger: {
+        Args: { p_booking_id: string; p_payment_method: PaymentMethod };
+        Returns: undefined;
+      };
+      confirm_payment_as_driver: {
+        Args: { p_booking_id: string; p_received: boolean };
+        Returns: undefined;
+      };
+      passenger_history: {
+        Args: { p_passenger_id: string };
+        Returns: {
+          completed: number;
+          cancelled: number;
+          no_shows: number;
+          red_flags: number;
+        }[];
+      };
     };
     Enums: {
       platform_role: PlatformRole;

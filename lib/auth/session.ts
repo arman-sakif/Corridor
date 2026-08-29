@@ -3,6 +3,8 @@ import 'server-only';
 import { cache } from 'react';
 import { redirect } from 'next/navigation';
 
+import { dynamicRoute } from '@/lib/routes';
+
 import { createClient } from '@/lib/supabase/server';
 import type { OperatorMemberRole, Tables } from '@/lib/supabase/database.types';
 
@@ -55,7 +57,7 @@ export async function requireViewer(returnTo?: string): Promise<Viewer> {
   const viewer = await getViewer();
   if (!viewer) {
     const next = returnTo ? `?next=${encodeURIComponent(returnTo)}` : '';
-    redirect(`/sign-in${next}`);
+    redirect(dynamicRoute(`/sign-in${next}`));
   }
   return viewer;
 }
