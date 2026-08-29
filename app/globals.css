@@ -1,0 +1,52 @@
+@import 'tailwindcss';
+
+/*
+ * Two audiences, one token set.
+ *
+ * Passengers get generous spacing and large tap targets; operators get dense
+ * tables on a laptop. Both draw from the same palette so the product does not
+ * feel like two products.
+ */
+@theme {
+  --color-ink-50: oklch(0.985 0.002 250);
+  --color-ink-100: oklch(0.967 0.003 250);
+  --color-ink-200: oklch(0.925 0.005 250);
+  --color-ink-300: oklch(0.865 0.007 250);
+  --color-ink-400: oklch(0.7 0.012 250);
+  --color-ink-500: oklch(0.58 0.015 250);
+  --color-ink-600: oklch(0.47 0.017 250);
+  --color-ink-700: oklch(0.38 0.018 250);
+  --color-ink-800: oklch(0.27 0.017 250);
+  --color-ink-900: oklch(0.19 0.015 250);
+
+  --color-brand-50: oklch(0.96 0.02 230);
+  --color-brand-100: oklch(0.92 0.045 230);
+  --color-brand-500: oklch(0.6 0.13 235);
+  --color-brand-600: oklch(0.52 0.14 238);
+  --color-brand-700: oklch(0.44 0.13 240);
+
+  --color-good-100: oklch(0.94 0.04 155);
+  --color-good-700: oklch(0.46 0.11 155);
+  --color-warn-100: oklch(0.95 0.05 85);
+  --color-warn-700: oklch(0.5 0.12 70);
+  --color-bad-100: oklch(0.94 0.035 25);
+  --color-bad-700: oklch(0.5 0.16 25);
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-ink-50);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+}
+
+/* Tabular figures everywhere a price, a seat count, or a time is shown. */
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
