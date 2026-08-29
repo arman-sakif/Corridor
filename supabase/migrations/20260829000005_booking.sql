@@ -351,9 +351,11 @@ begin
     raise exception 'That booking cannot be cancelled now.';
   end if;
 
+  -- The cast is required: a CASE over bare string literals is text, and
+  -- Postgres will not silently coerce text into an enum column.
   update public.bookings
-     set status = case when v_by_owner then 'cancelled_by_passenger'
-                       else 'cancelled_by_operator' end,
+     set status = (case when v_by_owner then 'cancelled_by_passenger'
+                        else 'cancelled_by_operator' end)::public.booking_status,
          cancelled_at = now(),
          hold_expires_at = null
    where id = p_booking_id;
@@ -398,13 +400,40 @@ $fn$;
 -- DEFINER. There is deliberately no insert or update policy: a booking that
 -- could be written directly is a booking whose capacity was never checked.
 
+-- True when the caller is a driver assigned to this departure. Defined here
+-- rather than with the rest of departure day, because the bookings policy
+-- below needs it and policies are validated when they are created.
+create or replace function public.is_departure_driver(p_departure_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $fn$
+  select exists (
+    select 1
+    from public.departure_vehicles dv
+    where dv.departure_id = p_departure_id
+      and dv.driver_id = auth.uid()
+  );
+$fn$;
+
+grant execute on function public.is_departure_driver(uuid) to authenticated;
+
 create policy bookings_select_own on public.bookings
   for select to authenticated
   using (passenger_id = auth.uid());
 
+-- Managers see their operator's whole book. A driver is a member too, but
+-- `is_operator_member` would hand them every booking the business has ever
+-- taken — and a driver's job needs one departure's worth of passengers, on the
+-- departures they are actually driving.
 create policy bookings_select_operator on public.bookings
   for select to authenticated
-  using (public.is_operator_member(public.departure_operator(departure_id)));
+  using (
+    public.is_operator_manager(public.departure_operator(departure_id))
+    or public.is_departure_driver(departure_id)
+  );
 
 create policy bookings_select_admin on public.bookings
   for select to authenticated
