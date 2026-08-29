@@ -104,12 +104,13 @@ export const scheduleSchema = z.object({
   departure_time: z
     .string()
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Enter a departure time like 09:00.'),
+  // Checkboxes arrive as one value or many, and always as strings.
   days_of_week: z
     .union([z.array(z.string()), z.string()])
-    .transform((value) => (Array.isArray(value) ? value : [value]))
+    .transform((value) => (Array.isArray(value) ? value : [value]).map(Number))
     .pipe(
       z
-        .array(z.coerce.number().int().min(0).max(6))
+        .array(z.number().int().min(0).max(6))
         .min(1, 'Choose at least one day this runs.'),
     ),
   max_seats: z.coerce

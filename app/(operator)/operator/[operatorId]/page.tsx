@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { dynamicRoute } from '@/lib/routes';
 import { todayInToronto } from '@/lib/time';
 
 /**
@@ -87,7 +88,7 @@ export default async function OperatorOverviewPage({
           {steps.map((step) => (
             <li key={step.href}>
               <Link
-                href={step.href}
+                href={dynamicRoute(step.href)}
                 className="flex items-start gap-3 rounded-lg p-3 hover:bg-ink-50"
               >
                 <span
@@ -126,7 +127,7 @@ export default async function OperatorOverviewPage({
 function Stat({ label, value, href }: { label: string; value: number; href: string }) {
   return (
     <Link
-      href={href}
+      href={dynamicRoute(href)}
       className="rounded-xl bg-white p-5 ring-1 ring-ink-200 transition-shadow hover:shadow-sm"
     >
       <p className="text-sm text-ink-600">{label}</p>

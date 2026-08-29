@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { SignUpForm } from './sign-up-form';
 import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
 import { getViewer } from '@/lib/auth/session';
+import { dynamicRoute } from '@/lib/routes';
 import { Card } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Create account' };
@@ -16,7 +17,7 @@ export default async function SignUpPage({
 }) {
   const params = await searchParams;
   const viewer = await getViewer();
-  if (viewer) redirect(safeRedirectPath(params.next, landingPathFor(viewer)));
+  if (viewer) redirect(dynamicRoute(safeRedirectPath(params.next, landingPathFor(viewer))));
 
   const next = safeRedirectPath(params.next, '/');
 

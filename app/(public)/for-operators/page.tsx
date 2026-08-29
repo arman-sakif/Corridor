@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { OperatorApplicationForm } from './application-form';
 import { getViewer } from '@/lib/auth/session';
 import { Alert, ButtonLink, Card } from '@/components/ui';
+import { dynamicRoute } from '@/lib/routes';
 
 export const metadata: Metadata = { title: 'List your business' };
 
@@ -56,7 +57,7 @@ export default async function ForOperatorsPage() {
                           : 'Suspended. Get in touch to sort it out.'}
                     </p>
                   </div>
-                  <ButtonLink href={`/operator/${membership.operator_id}`} tone="secondary">
+                  <ButtonLink href={dynamicRoute(`/operator/${membership.operator_id}`)} tone="secondary">
                     Open dashboard
                   </ButtonLink>
                 </div>
