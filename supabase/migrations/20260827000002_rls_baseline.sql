@@ -127,8 +127,10 @@ create policy profiles_select_admin on public.profiles
   for select to authenticated
   using (public.is_platform_admin());
 
--- platform_role is intentionally NOT writable through any policy. Granting
--- admin is a service-role operation, so no one can promote themselves.
+-- platform_role must not be self-granted. NOTE: the policy above does not
+-- achieve that on its own — RLS governs rows, not columns, so a user updating
+-- their own row can reach platform_role. The trigger in
+-- 20260829000007_guard_platform_role.sql is what actually stops it.
 
 -- ---------------------------------------------------------------------------
 -- cities

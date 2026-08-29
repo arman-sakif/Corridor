@@ -35,6 +35,19 @@ create trigger operators_attach_owner
   after insert on public.operators
   for each row execute function public.attach_operator_owner();
 
+-- The applicant can read their own application.
+--
+-- Not a convenience. `insert ... returning id` makes Postgres check the SELECT
+-- policies against the new row, and it does that *before* the AFTER trigger
+-- above has attached the owner — so `operators_select_own`, which asks whether
+-- the caller is a member, is false at exactly that moment. Without this policy
+-- every operator signup fails with "new row violates row-level security
+-- policy", which is a confusing way to say "you are not yet a member of the
+-- business you just created".
+create policy operators_select_creator on public.operators
+  for select to authenticated
+  using (created_by = auth.uid());
+
 -- ---------------------------------------------------------------------------
 -- Policy helpers
 -- ---------------------------------------------------------------------------

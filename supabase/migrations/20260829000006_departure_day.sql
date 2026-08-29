@@ -21,24 +21,8 @@ create policy departure_vehicles_write_manager on public.departure_vehicles
   using (public.is_operator_manager(public.departure_operator(departure_id)))
   with check (public.is_operator_manager(public.departure_operator(departure_id)));
 
--- True when the caller is the driver assigned to this departure. Drivers read
--- their own manifest and nothing else.
-create or replace function public.is_departure_driver(p_departure_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public, pg_temp
-as $fn$
-  select exists (
-    select 1
-    from public.departure_vehicles dv
-    where dv.departure_id = p_departure_id
-      and dv.driver_id = auth.uid()
-  );
-$fn$;
-
-grant execute on function public.is_departure_driver(uuid) to authenticated;
+-- is_departure_driver() lives in 20260829000005_booking.sql, because the
+-- bookings select policy there already needs it.
 
 -- ---------------------------------------------------------------------------
 -- assign_booking_vehicle — put a passenger in a van
@@ -237,7 +221,10 @@ declare
   v_operator  uuid;
   v_departure uuid;
 begin
-  select b.*, d.operator_id, d.id as departure_id
+  -- b.* already carries departure_id, so the operator is aliased rather than
+  -- selecting d.id again: a record with two fields of the same name is
+  -- ambiguous the moment you read it.
+  select b.*, d.operator_id as owning_operator
     into v_booking
     from public.bookings b
     join public.departures d on d.id = b.departure_id
@@ -247,7 +234,7 @@ begin
     raise exception 'That booking no longer exists.';
   end if;
 
-  v_operator := v_booking.operator_id;
+  v_operator := v_booking.owning_operator;
   v_departure := v_booking.departure_id;
 
   if not public.is_operator_manager(v_operator)
