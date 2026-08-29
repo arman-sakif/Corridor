@@ -37,6 +37,9 @@ describe('function grants', () => {
         'departure_leg_loads',
         'departure_operator',
         'operator_is_active',
+        // Quoting a fare is public: a passenger sees the price before they
+        // sign in. It reads no price from the caller and writes nothing.
+        'quote_booking',
         'route_operator',
         'toronto_instant',
       ],

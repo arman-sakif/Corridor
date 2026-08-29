@@ -7,10 +7,19 @@ import { FormMessage, SubmitButton, fieldError } from '@/components/form';
 import { Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { idleState } from '@/lib/forms';
 import { formatCents } from '@/lib/money';
+import type { SurchargePolicy } from '@/lib/booking/fares';
+
+type Stop = {
+  stopId: string;
+  label: string;
+  cityName: string;
+  description: string | null;
+  isAirport: boolean;
+};
 
 type Boarding = {
-  from: { stopId: string; label: string; cityName: string; description: string | null };
-  to: { stopId: string; label: string; cityName: string; description: string | null };
+  from: Stop;
+  to: Stop;
   baseCents: number;
   seatsLeft: number;
 };
@@ -23,21 +32,35 @@ type Boarding = {
 export function RequestSeatForm({
   departureId,
   boardings,
+  surcharges,
 }: {
   departureId: string;
   boardings: Boarding[];
+  surcharges: SurchargePolicy;
 }) {
   const [state, action] = useActionState(requestSeat, idleState);
   const [choice, setChoice] = useState(
     `${boardings[0]?.from.stopId}:${boardings[0]?.to.stopId}`,
   );
   const [seats, setSeats] = useState(1);
+  const [bags, setBags] = useState(1);
 
   const selected =
     boardings.find((b) => `${b.from.stopId}:${b.to.stopId}` === choice) ?? boardings[0];
 
   const maxSeats = Math.min(selected?.seatsLeft ?? 1, 8);
-  const total = (selected?.baseCents ?? 0) * seats;
+
+  // The same arithmetic request_booking() does, so the running total is the
+  // price that will be charged rather than an optimistic guess. The server
+  // recomputes it regardless — this is display, not a decision.
+  const base = (selected?.baseCents ?? 0) * seats;
+  const extraBags = Math.max(0, bags - surcharges.freeLuggage * seats);
+  const luggage = extraBags * surcharges.perExtraLuggageCents;
+  const airport =
+    selected && (selected.from.isAirport || selected.to.isAirport)
+      ? surcharges.airportFeeCents * seats
+      : 0;
+  const total = base + luggage + airport;
 
   return (
     <Card className="p-5">
@@ -108,7 +131,14 @@ export function RequestSeatForm({
             hint="Roughly, so the driver can plan the boot."
             error={fieldError(state, 'luggage_count')}
           >
-            <Input name="luggage_count" type="number" min={0} max={20} defaultValue={1} />
+            <Input
+              name="luggage_count"
+              type="number"
+              min={0}
+              max={20}
+              value={bags}
+              onChange={(event) => setBags(Math.max(0, Number(event.target.value) || 0))}
+            />
           </Field>
         </div>
 
@@ -120,12 +150,32 @@ export function RequestSeatForm({
           <Textarea name="passenger_note" rows={2} />
         </Field>
 
-        <div className="flex items-baseline justify-between border-t border-ink-100 pt-4">
-          <span className="text-sm text-ink-600">
-            {seats} seat{seats === 1 ? '' : 's'} at {formatCents(selected?.baseCents ?? 0)}
-          </span>
-          <span className="numeric text-xl font-semibold text-ink-900">{formatCents(total)}</span>
-        </div>
+        <dl className="space-y-1 border-t border-ink-100 pt-4 text-sm">
+          <div className="flex justify-between text-ink-600">
+            <dt>
+              {seats} seat{seats === 1 ? '' : 's'} at {formatCents(selected?.baseCents ?? 0)}
+            </dt>
+            <dd className="numeric">{formatCents(base)}</dd>
+          </div>
+          {luggage > 0 ? (
+            <div className="flex justify-between text-ink-600">
+              <dt>
+                {extraBags} extra bag{extraBags === 1 ? '' : 's'}
+              </dt>
+              <dd className="numeric">{formatCents(luggage)}</dd>
+            </div>
+          ) : null}
+          {airport > 0 ? (
+            <div className="flex justify-between text-ink-600">
+              <dt>Airport fee</dt>
+              <dd className="numeric">{formatCents(airport)}</dd>
+            </div>
+          ) : null}
+          <div className="flex items-baseline justify-between pt-1 font-semibold text-ink-900">
+            <dt>Total, paid to the driver</dt>
+            <dd className="numeric text-xl">{formatCents(total)}</dd>
+          </div>
+        </dl>
 
         <FormMessage state={state} />
 

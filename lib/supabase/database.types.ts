@@ -393,8 +393,18 @@ export interface Database {
           public_phone: string | null;
           status: OperatorStatus;
           created_by: string | null;
+          free_luggage_per_seat: number;
+          extra_luggage_cents: number;
+          airport_fee_cents: number;
         } & Timestamps,
-        'type' | 'bio' | 'public_phone' | 'status' | 'created_by',
+        | 'type'
+        | 'bio'
+        | 'public_phone'
+        | 'status'
+        | 'created_by'
+        | 'free_luggage_per_seat'
+        | 'extra_luggage_cents'
+        | 'airport_fee_cents',
         'id' | 'created_at' | 'updated_at'
       >;
       operator_members: Table<
@@ -442,8 +452,9 @@ export interface Database {
           label: string;
           description: string | null;
           is_active: boolean;
+          is_airport: boolean;
         } & Timestamps,
-        'description' | 'is_active',
+        'description' | 'is_active' | 'is_airport',
         'id' | 'created_at' | 'updated_at'
       >;
       routes: Table<
@@ -671,6 +682,21 @@ export interface Database {
       generate_departures: {
         Args: { p_operator_id?: string | null; p_days?: number };
         Returns: number;
+      };
+      quote_booking: {
+        Args: {
+          p_departure_id: string;
+          p_from_stop_id: string;
+          p_to_stop_id: string;
+          p_seats: number;
+          p_luggage_count: number;
+        };
+        Returns: {
+          base_cents: number;
+          luggage_cents: number;
+          airport_cents: number;
+          total_cents: number;
+        }[];
       };
       departure_leg_loads: {
         Args: { p_departure_ids: string[] };

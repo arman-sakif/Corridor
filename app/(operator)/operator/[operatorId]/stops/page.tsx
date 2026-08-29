@@ -15,7 +15,7 @@ export default async function StopsPage({
     supabase.from('cities').select('id, name').eq('is_active', true).order('name'),
     supabase
       .from('stops')
-      .select('id, label, description, is_active, city:cities(id, name)')
+      .select('id, label, description, is_active, is_airport, city:cities(id, name)')
       .eq('operator_id', operatorId)
       .order('label'),
   ]);
@@ -64,6 +64,11 @@ export default async function StopsPage({
                     </Td>
                     <Td>
                       <span className="font-medium text-ink-900">{stop.label}</span>
+                      {stop.is_airport ? (
+                        <span className="ml-2 align-middle">
+                          <Badge tone="brand">Airport</Badge>
+                        </span>
+                      ) : null}
                       {stop.description ? (
                         <p className="mt-0.5 text-xs text-ink-500">{stop.description}</p>
                       ) : null}
