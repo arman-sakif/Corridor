@@ -49,9 +49,23 @@ describe('what a signed-out visitor can see', () => {
   });
 
   it('cannot see the timetable, the fleet, or anyone’s bookings', async () => {
+    // Refused at the privilege gate, before RLS is even consulted. An empty
+    // result would also be correct, but this is the stronger answer: anon has
+    // no business reaching these tables at all, so it holds no grant on them.
     for (const table of ['schedules', 'vehicles', 'bookings', 'departure_vehicles']) {
-      const rows = await test.asAnon(`select * from public.${table}`);
-      assert.equal(rows.length, 0, `anon must not read ${table}`);
+      await assert.rejects(
+        test.asAnon(`select * from public.${table}`),
+        /permission denied/i,
+        `anon must not read ${table}`,
+      );
+    }
+  });
+
+  it('is refused in-city entirely, by both gates', async () => {
+    // Phase 6 exists as tables only: no policies and no privileges. Both come
+    // down together when the feature is built.
+    for (const table of ['incity_zones', 'incity_bookings']) {
+      await assert.rejects(test.asAnon(`select * from public.${table}`), /permission denied/i);
     }
   });
 

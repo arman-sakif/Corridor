@@ -65,8 +65,6 @@ const AUTH_SHIM = `
   -- "permission denied for schema auth" rather than simply denying the row.
   grant usage on schema public, auth to anon, authenticated, service_role;
   grant execute on function auth.uid(), auth.role() to anon, authenticated, service_role;
-  alter default privileges in schema public
-    grant all on tables to anon, authenticated, service_role;
 `;
 
 export type TestDb = {
@@ -102,12 +100,13 @@ export async function migratedDatabase(): Promise<TestDb> {
     }
   }
 
-  // Grant the API roles what Supabase grants them, so a policy is the only
-  // thing standing between a caller and a row.
-  await db.exec(`
-    grant all on all tables in schema public to anon, authenticated, service_role;
-    grant all on all sequences in schema public to anon, authenticated, service_role;
-  `);
+  // Deliberately NO blanket grant here.
+  //
+  // The project has "automatically expose new tables" turned off, so the API
+  // roles get exactly the privileges 20260829000010_table_grants.sql hands
+  // them and nothing else. Granting more here would make the tests pass
+  // against privileges production does not have — which is how a
+  // `permission denied for table` reaches a user instead of a test.
 
   // One transaction per call, with the role and the claims set locally inside
   // it — which is exactly what PostgREST does for every HTTP request. Anything

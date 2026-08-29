@@ -128,3 +128,98 @@ describe('function grants', () => {
     );
   });
 });
+
+describe('table grants', () => {
+  let test: TestDb;
+
+  before(async () => {
+    test = await migratedDatabase();
+  });
+
+  after(async () => test.close());
+
+  it('gives a signed-out visitor read access to exactly what search needs', async () => {
+    const readable = await test.raw<{ relname: string }>(
+      `select c.relname
+         from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          and has_table_privilege('anon', c.oid, 'select')
+        order by 1`,
+    );
+
+    assert.deepEqual(
+      readable.map((row) => row.relname),
+      ['cities', 'departures', 'fares', 'operators', 'ratings', 'route_stops', 'routes', 'stops'],
+    );
+  });
+
+  it('gives a signed-out visitor no write access anywhere', async () => {
+    const writable = await test.raw<{ relname: string }>(
+      `select c.relname
+         from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          and (has_table_privilege('anon', c.oid, 'insert')
+            or has_table_privilege('anon', c.oid, 'update')
+            or has_table_privilege('anon', c.oid, 'delete'))`,
+    );
+
+    assert.deepEqual(writable.map((row) => row.relname), []);
+  });
+
+  it('makes bookings read-only to the API', async () => {
+    // Every write goes through a SECURITY DEFINER function that checks
+    // per-leg capacity first. A booking that could be INSERTed directly is a
+    // booking whose capacity was never checked.
+    const [row] = await test.raw<{
+      sel: boolean;
+      ins: boolean;
+      upd: boolean;
+      del: boolean;
+    }>(
+      `select has_table_privilege('authenticated', 'public.bookings', 'select') as sel,
+              has_table_privilege('authenticated', 'public.bookings', 'insert') as ins,
+              has_table_privilege('authenticated', 'public.bookings', 'update') as upd,
+              has_table_privilege('authenticated', 'public.bookings', 'delete') as del`,
+    );
+
+    assert.equal(row!.sel, true);
+    assert.equal(row!.ins, false, 'inserting a booking must go through request_booking()');
+    assert.equal(row!.upd, false, 'status transitions are guarded functions, not updates');
+    assert.equal(row!.del, false);
+  });
+
+  it('keeps the fare audit log append-only', async () => {
+    const [row] = await test.raw<{ ins: boolean; upd: boolean; del: boolean }>(
+      `select has_table_privilege('authenticated', 'public.fare_changes', 'insert') as ins,
+              has_table_privilege('authenticated', 'public.fare_changes', 'update') as upd,
+              has_table_privilege('authenticated', 'public.fare_changes', 'delete') as del`,
+    );
+
+    assert.equal(row!.ins, true);
+    assert.equal(row!.upd, false, 'an operator must not rewrite its own pricing history');
+    assert.equal(row!.del, false);
+  });
+
+  it('grants nothing at all on the in-city tables', async () => {
+    for (const table of ['public.incity_zones', 'public.incity_bookings']) {
+      for (const role of ['anon', 'authenticated']) {
+        const [row] = await test.raw<{ any_priv: boolean }>(
+          `select has_table_privilege($1, $2, 'select')
+               or has_table_privilege($1, $2, 'insert') as any_priv`,
+          [role, table],
+        );
+        assert.equal(row!.any_priv, false, `${role} must hold nothing on ${table} until Phase 6`);
+      }
+    }
+  });
+
+  it('lets the service role through, because it is the one that bypasses RLS', async () => {
+    const [row] = await test.raw<{ n: number }>(
+      `select count(*)::int as n
+         from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          and not has_table_privilege('service_role', c.oid, 'select')`,
+    );
+    assert.equal(row!.n, 0);
+  });
+});

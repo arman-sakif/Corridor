@@ -32,8 +32,13 @@ npm run dev
 1. Create a project at [supabase.com](https://supabase.com). The free tier is
    enough.
 2. Copy the project URL and both keys from **Project settings → API** into
-   `.env.local`. The service-role key is server-only and must never reach the
-   client bundle.
+   `.env.local`:
+   - the **publishable** key (`sb_publishable_…`) is the browser one — RLS is
+     what protects the data behind it;
+   - the **secret** key (`sb_secret_…`) is server-only and must never reach the
+     client bundle.
+
+   Note the URL is `https://<ref>.supabase.co`, not the dashboard link.
 3. Apply the schema:
 
    ```bash
@@ -51,8 +56,9 @@ which is deliberately not something the app can do — see below.
 ### Becoming a platform admin
 
 `platform_role` is not writable through any policy, and a trigger blocks the
-change unless it comes from a platform admin or the service role. So the first
-admin is granted from the SQL editor:
+change unless it comes from a platform admin or the service role. A direct
+database session is exempt — someone holding one could disable the trigger
+anyway — so the first admin is granted from the SQL editor:
 
 ```sql
 update public.profiles set platform_role = 'admin'
@@ -60,6 +66,17 @@ where id = (select id from auth.users where email = 'you@example.com');
 ```
 
 Then `/admin` lets you add cities and vet operators.
+
+### Table and function grants
+
+This project was created with **"automatically expose new tables" off**, so
+Supabase grants the API roles nothing by default and the migrations grant
+everything explicitly. Two gates rather than one: `GRANT` decides whether a
+role may touch a table at all, RLS decides which rows once it may.
+
+If you create a project with that setting **on**, the app still works — you
+just have Supabase's defaults sitting underneath the explicit grants. The tests
+in `supabase/tests/grants.test.ts` describe the intended state either way.
 
 ### The daily job
 

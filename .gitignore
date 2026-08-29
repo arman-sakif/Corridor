@@ -24,7 +24,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env — never commit keys, especially the Supabase service-role key
+# credentials kept beside the project — never commit these
+supabase-creds.txt
+*creds*.txt
+*credentials*.txt
+
+# env — never commit keys, especially the Supabase secret key
 .env
 .env*.local
 .env.local
@@ -45,3 +50,4 @@ yarn-error.log*
 # local agent workspace and project brief (kept out of the repo by request)
 /.claude/
 /CLAUDE.md
+
