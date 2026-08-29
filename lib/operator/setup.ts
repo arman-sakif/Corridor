@@ -10,6 +10,7 @@ import {
   routeSchema,
   scheduleSchema,
   stopSchema,
+  surchargeSchema,
   vehicleSchema,
 } from '@/lib/validation/operator';
 
@@ -27,11 +28,11 @@ export async function saveStop(_prev: FormState, formData: FormData): Promise<Fo
   const parsed = parseForm(stopSchema, formData);
   if (!parsed.ok) return parsed.state;
 
-  const { operator_id, stop_id, city_id, label, description } = parsed.data;
+  const { operator_id, stop_id, city_id, label, description, is_airport } = parsed.data;
   await requireOperatorRole(operator_id);
 
   const supabase = await createClient();
-  const values = { city_id, label, description: description || null };
+  const values = { city_id, label, description: description || null, is_airport };
 
   const { error } = stop_id
     ? await supabase.from('stops').update(values).eq('id', stop_id).eq('operator_id', operator_id)
@@ -145,6 +146,31 @@ export async function setFare(_prev: FormState, formData: FormData): Promise<For
 
   revalidatePath(`/operator/${route.operator_id}/routes/${route_id}`);
   return succeed('Price saved.');
+}
+
+/** Luggage and airport fees. Cash and e-transfer are unaffected — they cost
+ *  the same, and nothing here can make them differ. */
+export async function saveSurcharges(_prev: FormState, formData: FormData): Promise<FormState> {
+  const parsed = parseForm(surchargeSchema, formData);
+  if (!parsed.ok) return parsed.state;
+
+  const { operator_id, free_luggage_per_seat, extra_luggage, airport_fee } = parsed.data;
+  await requireOperatorRole(operator_id, ['owner']);
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from('operators')
+    .update({
+      free_luggage_per_seat,
+      extra_luggage_cents: extra_luggage,
+      airport_fee_cents: airport_fee,
+    })
+    .eq('id', operator_id);
+
+  if (error) return fail('We could not save those charges. Try again in a moment.');
+
+  revalidatePath(`/operator/${operator_id}/settings`);
+  return succeed('Saved. These apply to bookings made from now on.');
 }
 
 /* -------------------------------------------------------------- schedules */

@@ -33,6 +33,21 @@ export const operatorApplicationSchema = z.object({
     .or(z.literal('')),
 });
 
+/**
+ * Surcharges are fixed amounts, never percentages. The free allowance is per
+ * seat, so a party of two carries two bags before anything is charged.
+ */
+export const surchargeSchema = z.object({
+  operator_id: z.uuid(),
+  free_luggage_per_seat: z.coerce
+    .number()
+    .int()
+    .min(0, 'Use 0 if every bag is charged.')
+    .max(10, 'That is more free luggage than a van can take.'),
+  extra_luggage: priceSchema,
+  airport_fee: priceSchema,
+});
+
 export const operatorProfileSchema = z.object({
   operator_id: z.uuid(),
   name: z.string().trim().min(2, 'Enter the name passengers know you by.').max(120),
@@ -57,6 +72,11 @@ export const stopSchema = z.object({
     .max(300, 'Keep this under 300 characters.')
     .optional()
     .or(z.literal('')),
+  // Checkbox: present means on. There is no geocoding anywhere in this system,
+  // so the operator is the one who says a stop is at an airport.
+  is_airport: z
+    .union([z.literal('on'), z.literal('true'), z.undefined()])
+    .transform((value) => value !== undefined),
 });
 
 /* ----------------------------------------------------------------- routes */

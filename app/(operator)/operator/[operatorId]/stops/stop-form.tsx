@@ -45,6 +45,16 @@ export function StopForm({
         <Textarea name="description" rows={2} placeholder="By the Shoppers Drug Mart entrance" />
       </Field>
 
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg p-3 ring-1 ring-ink-200 has-checked:bg-brand-50 has-checked:ring-brand-500">
+        <input type="checkbox" name="is_airport" className="mt-0.5" />
+        <span className="text-sm">
+          <span className="block font-medium text-ink-900">This one is at an airport</span>
+          <span className="mt-0.5 block text-ink-600">
+            Your airport fee is added to any trip that starts or ends here.
+          </span>
+        </span>
+      </label>
+
       <FormMessage state={state} />
 
       <SubmitButton pendingLabel="Adding…">Add stop</SubmitButton>

@@ -245,9 +245,11 @@ export async function departureBoardings({
     .from('departures')
     .select(
       `id, service_date, departure_time, max_seats, status, route_id,
-       operator:operators(id, name, public_phone, bio),
+       operator:operators(id, name, public_phone, bio,
+         free_luggage_per_seat, extra_luggage_cents, airport_fee_cents),
        route:routes(id, name, pricing_mode,
-         route_stops(seq, stop:stops(id, city_id, label, description, city:cities(name))),
+         route_stops(seq, stop:stops(id, city_id, label, description, is_airport,
+           city:cities(name))),
          fares(from_seq, to_seq, price_cents))`,
     )
     .eq('id', departureId)
@@ -266,6 +268,7 @@ export async function departureBoardings({
         city_id: string;
         label: string;
         description: string | null;
+        is_airport: boolean;
         city: { name: string } | null;
       } | null;
     }[];
@@ -280,8 +283,15 @@ export async function departureBoardings({
       cityName: rs.stop?.city?.name ?? '',
       label: rs.stop?.label ?? '',
       description: rs.stop?.description ?? null,
+      isAirport: rs.stop?.is_airport ?? false,
     }))
     .sort((a, b) => a.seq - b.seq);
+
+  const operatorSurcharges = departure.operator as unknown as {
+    free_luggage_per_seat: number;
+    extra_luggage_cents: number;
+    airport_fee_cents: number;
+  } | null;
 
   const priced = priceableSegments(route.pricing_mode, route.fares, stops.length);
 
@@ -329,6 +339,13 @@ export async function departureBoardings({
       public_phone: string | null;
       bio: string | null;
     } | null,
+    // The operator's own surcharge settings, so the page can show a running
+    // total that matches what request_booking() will actually charge.
+    surcharges: {
+      freeLuggage: operatorSurcharges?.free_luggage_per_seat ?? 1,
+      perExtraLuggageCents: operatorSurcharges?.extra_luggage_cents ?? 0,
+      airportFeeCents: operatorSurcharges?.airport_fee_cents ?? 0,
+    },
     routeName: route.name,
     stops,
     boardings,

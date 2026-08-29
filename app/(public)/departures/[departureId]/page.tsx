@@ -111,7 +111,11 @@ export default async function DeparturePage({
             </div>
           </Card>
         ) : (
-          <RequestSeatForm departureId={departureId} boardings={available} />
+          <RequestSeatForm
+            departureId={departureId}
+            boardings={available}
+            surcharges={departure.surcharges}
+          />
         )}
       </div>
 
