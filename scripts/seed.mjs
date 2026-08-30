@@ -231,21 +231,25 @@ async function seedAll() {
     }
 
     /* ---- stops --------------------------------------------------------- */
-    const stopIdByCity = {};
-    for (const [city, label, description] of op.stops) {
+    // Keyed by the stop's fare key, not its city: an operator can have two
+    // stops in one city (Yorkdale and Pearson are both Toronto) and each needs
+    // its own price.
+    const stopIdByKey = {};
+    for (const stop of op.stops) {
       const { data, error } = await db
         .from('stops')
         .insert({
           operator_id: operatorId,
-          city_id: cityId[city],
-          label,
-          description,
+          city_id: cityId[stop.city],
+          label: stop.label,
+          description: stop.description ?? null,
+          is_airport: stop.isAirport ?? false,
           is_active: true,
         })
         .select('id')
         .single();
-      if (error) die(`Could not create the stop ${label}`, error);
-      stopIdByCity[city] = data.id;
+      if (error) die(`Could not create the stop ${stop.label}`, error);
+      stopIdByKey[stop.key ?? stop.city] = data.id;
       stopCount += 1;
     }
 
@@ -263,13 +267,14 @@ async function seedAll() {
 
     /* ---- routes, both directions --------------------------------------- */
     const priceByPair = new Map(op.fares.map(([a, b, price]) => [pairKey(a, b), cents(price)]));
-    const forwardCities = op.stops.map(([city]) => city);
+    const forwardKeys = op.stops.map((stop) => stop.key ?? stop.city);
+    const cityOfKey = new Map(op.stops.map((stop) => [stop.key ?? stop.city, stop.city]));
 
     for (const direction of ['forward', 'reverse']) {
-      const orderedCities =
-        direction === 'forward' ? forwardCities : [...forwardCities].reverse();
+      const orderedKeys = direction === 'forward' ? forwardKeys : [...forwardKeys].reverse();
 
-      const routeName = `${orderedCities[0]} to ${orderedCities.at(-1)}`;
+      // Named by city, because that is what an operator calls the run.
+      const routeName = `${cityOfKey.get(orderedKeys[0])} to ${cityOfKey.get(orderedKeys.at(-1))}`;
 
       const { data: route, error: routeError } = await db
         .from('routes')
@@ -285,9 +290,9 @@ async function seedAll() {
       routeCount += 1;
 
       const { error: rsError } = await db.from('route_stops').insert(
-        orderedCities.map((city, index) => ({
+        orderedKeys.map((key, index) => ({
           route_id: route.id,
-          stop_id: stopIdByCity[city],
+          stop_id: stopIdByKey[key],
           seq: index + 1,
         })),
       );
@@ -298,9 +303,9 @@ async function seedAll() {
       // forward, and a route runs one way, so the same pair yields a fare row
       // on both routes.
       const fareRows = [];
-      for (let a = 0; a < orderedCities.length; a += 1) {
-        for (let b = a + 1; b < orderedCities.length; b += 1) {
-          const price = priceByPair.get(pairKey(orderedCities[a], orderedCities[b]));
+      for (let a = 0; a < orderedKeys.length; a += 1) {
+        for (let b = a + 1; b < orderedKeys.length; b += 1) {
+          const price = priceByPair.get(pairKey(orderedKeys[a], orderedKeys[b]));
           if (price === undefined) continue;
           // Under additive only consecutive legs are stored; anything longer
           // is summed at read time by lib/booking/fares.ts.
@@ -363,7 +368,7 @@ async function seedAll() {
     );
 
     // Stash what the booking pass needs.
-    op._runtime = { operatorId, stopIdByCity, vehicleIds, driverIds, ownerId };
+    op._runtime = { operatorId, stopIdByKey, vehicleIds, driverIds, ownerId };
   }
 
   /* ---- past departures, inserted directly ----------------------------- */
@@ -449,17 +454,19 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
     if (!data || data.length < 1000) break;
   }
 
-  const { data: routeStops } = await db.from('route_stops').select('route_id, stop_id, seq');
+  const { data: routeStops } = await db
+    .from('route_stops')
+    .select('route_id, stop_id, seq, stop:stops(is_airport)');
   const { data: routes } = await db.from('routes').select('id, pricing_mode');
   const { data: fares } = await db.from('fares').select('route_id, from_seq, to_seq, price_cents');
   const { data: operators } = await db
     .from('operators')
-    .select('id, free_luggage_per_seat, extra_luggage_cents, status');
+    .select('id, free_luggage_per_seat, extra_luggage_cents, airport_fee_cents, status');
 
   const stopsByRoute = new Map();
   for (const rs of routeStops) {
     const list = stopsByRoute.get(rs.route_id) ?? [];
-    list.push(rs);
+    list.push({ ...rs, is_airport: rs.stop?.is_airport ?? false });
     stopsByRoute.set(rs.route_id, list);
   }
   for (const list of stopsByRoute.values()) list.sort((a, b) => a.seq - b.seq);
@@ -533,6 +540,11 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
       const extraBags = Math.max(0, luggage - operator.free_luggage_per_seat * seats);
       const luggageCents = extraBags * operator.extra_luggage_cents;
       const baseCents = perSeat * seats;
+      // Either end being an airport adds the operator's flat fee per seat,
+      // exactly as request_booking() computes it.
+      const touchesAirport =
+        stops[fromSeq - 1].is_airport === true || stops[toSeq - 1].is_airport === true;
+      const airportCents = touchesAirport ? operator.airport_fee_cents * seats : 0;
 
       const passengerId = pick(passengerIds);
 
@@ -551,8 +563,8 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
         luggage_count: luggage,
         base_cents: baseCents,
         luggage_cents: luggageCents,
-        airport_cents: 0,
-        total_cents: baseCents + luggageCents,
+        airport_cents: airportCents,
+        total_cents: baseCents + luggageCents + airportCents,
         passenger_note: rand() < 0.15 ? pick(NOTES) : null,
         payment_method: status === 'settled' ? pick(['cash', 'cash', 'etransfer']) : null,
         passenger_confirmed_at: status === 'settled' ? new Date().toISOString() : null,
@@ -578,7 +590,7 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
     (d) =>
       d.operator_id === harbour?._runtime?.operatorId &&
       d.service_date > todayIso &&
-      (stopsByRoute.get(d.route_id) ?? []).length === 5 &&
+      (stopsByRoute.get(d.route_id) ?? []).length >= 5 &&
       (load.get(d.id) ?? []).every((n) => !n),
   );
 
