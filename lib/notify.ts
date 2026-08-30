@@ -25,6 +25,9 @@ export type NotificationKind =
   | 'booking_cancelled'
   | 'departure_tomorrow'
   | 'payment_reminder'
+  | 'incity_requested'
+  | 'incity_approved'
+  | 'incity_declined'
   | 'login_code'
   | 'password_reset';
 

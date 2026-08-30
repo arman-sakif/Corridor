@@ -61,12 +61,18 @@ describe('what a signed-out visitor can see', () => {
     }
   });
 
-  it('is refused in-city entirely, by both gates', async () => {
-    // Phase 6 exists as tables only: no policies and no privileges. Both come
-    // down together when the feature is built.
-    for (const table of ['incity_zones', 'incity_bookings']) {
-      await assert.rejects(test.asAnon(`select * from public.${table}`), /permission denied/i);
-    }
+  it('can read in-city zones to compare prices, but not who booked one', async () => {
+    // Zones are public for the same reason fares are: somebody weighing up a
+    // trip sees what the local leg costs before they sign in.
+    const zones = await test.asAnon(`select id from public.incity_zones`);
+    assert.ok(Array.isArray(zones), 'anon should be able to read active zones');
+
+    // An in-city booking carries a passenger's destination address. Refused at
+    // the privilege gate, before RLS is even consulted.
+    await assert.rejects(
+      test.asAnon(`select * from public.incity_bookings`),
+      /permission denied/i,
+    );
   });
 
   it('can still be told how full a departure is', async () => {

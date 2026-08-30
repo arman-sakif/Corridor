@@ -30,7 +30,10 @@ export type NotificationKind =
   | 'booking_declined'
   | 'booking_cancelled'
   | 'departure_tomorrow'
-  | 'payment_reminder';
+  | 'payment_reminder'
+  | 'incity_requested'
+  | 'incity_approved'
+  | 'incity_declined';
 
 export type BookingStatus =
   | 'held'
@@ -825,6 +828,19 @@ export interface Database {
         Args: { p_ids?: string[] | null };
         Returns: number;
       };
+      request_incity_ride: {
+        Args: {
+          p_booking_id: string;
+          p_operator_id: string;
+          p_pickup_stop_id: string;
+          p_zone_id: string;
+          p_destination_address: string;
+        };
+        Returns: string;
+      };
+      approve_incity_ride: { Args: { p_id: string }; Returns: undefined };
+      decline_incity_ride: { Args: { p_id: string }; Returns: undefined };
+      cancel_incity_ride: { Args: { p_id: string }; Returns: undefined };
       phone_in_use: {
         Args: { p_phone: string; p_exclude?: string | null };
         Returns: boolean;

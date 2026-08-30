@@ -120,13 +120,13 @@ describe('function grants', () => {
         order by 1`,
     );
 
-    // Three deliberate exceptions. In-city is Phase 6: its tables exist, deny
-    // everything, and that is right until the feature is built. The recovery
-    // throttle is reached only by a Server Action holding the secret key —
-    // there is no row on it any signed-in user should ever see.
+    // One deliberate exception left. The recovery throttle is reached only by
+    // a Server Action holding the secret key — there is no row on it any
+    // signed-in user should ever see. The in-city tables left this list when
+    // Phase 6 was built.
     assert.deepEqual(
       policyless.map((row) => row.relname),
-      ['auth_recovery_requests', 'incity_bookings', 'incity_zones'],
+      ['auth_recovery_requests'],
     );
   });
 });
@@ -151,7 +151,19 @@ describe('table grants', () => {
 
     assert.deepEqual(
       readable.map((row) => row.relname),
-      ['cities', 'departures', 'fares', 'operators', 'ratings', 'route_stops', 'routes', 'stops'],
+      // incity_zones joined the list with Phase 6: a passenger compares local
+      // drop-off prices before signing in, exactly as they compare fares.
+      [
+        'cities',
+        'departures',
+        'fares',
+        'incity_zones',
+        'operators',
+        'ratings',
+        'route_stops',
+        'routes',
+        'stops',
+      ],
     );
   });
 
@@ -202,17 +214,42 @@ describe('table grants', () => {
     assert.equal(row!.del, false);
   });
 
-  it('grants nothing at all on the in-city tables', async () => {
-    for (const table of ['public.incity_zones', 'public.incity_bookings']) {
-      for (const role of ['anon', 'authenticated']) {
-        const [row] = await test.raw<{ any_priv: boolean }>(
-          `select has_table_privilege($1, $2, 'select')
-               or has_table_privilege($1, $2, 'insert') as any_priv`,
-          [role, table],
-        );
-        assert.equal(row!.any_priv, false, `${role} must hold nothing on ${table} until Phase 6`);
-      }
-    }
+  it('makes an in-city ride read-only to the API, like a booking', async () => {
+    // Every write is one of the request/approve/decline/cancel functions. A
+    // row that could be UPDATEd directly is a price the passenger could
+    // rewrite, or an address the operator could.
+    const [ride] = await test.raw<{ sel: boolean; ins: boolean; upd: boolean; del: boolean }>(
+      `select has_table_privilege('authenticated', 'public.incity_bookings', 'select') as sel,
+              has_table_privilege('authenticated', 'public.incity_bookings', 'insert') as ins,
+              has_table_privilege('authenticated', 'public.incity_bookings', 'update') as upd,
+              has_table_privilege('authenticated', 'public.incity_bookings', 'delete') as del`,
+    );
+
+    assert.equal(ride!.sel, true);
+    assert.equal(ride!.ins, false, 'a ride must go through request_incity_ride()');
+    assert.equal(ride!.upd, false, 'status changes are guarded functions, not updates');
+    assert.equal(ride!.del, false);
+
+    // And a signed-out visitor holds nothing on it at all.
+    const [anon] = await test.raw<{ any_priv: boolean }>(
+      `select has_table_privilege('anon', 'public.incity_bookings', 'select')
+           or has_table_privilege('anon', 'public.incity_bookings', 'insert') as any_priv`,
+    );
+    assert.equal(anon!.any_priv, false);
+  });
+
+  it('lets an operator manage its own zones, the way it manages its stops', async () => {
+    const [row] = await test.raw<{ sel: boolean; ins: boolean; upd: boolean; del: boolean }>(
+      `select has_table_privilege('authenticated', 'public.incity_zones', 'select') as sel,
+              has_table_privilege('authenticated', 'public.incity_zones', 'insert') as ins,
+              has_table_privilege('authenticated', 'public.incity_zones', 'update') as upd,
+              has_table_privilege('authenticated', 'public.incity_zones', 'delete') as del`,
+    );
+
+    assert.equal(row!.sel, true);
+    assert.equal(row!.ins, true);
+    assert.equal(row!.upd, true);
+    assert.equal(row!.del, true);
   });
 
   it('lets the service role through, because it is the one that bypasses RLS', async () => {
