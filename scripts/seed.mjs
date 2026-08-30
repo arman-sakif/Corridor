@@ -21,8 +21,16 @@
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 
-import { CITIES, INCITY_OPERATOR, OPERATORS, PASSENGERS, SCHEDULE_DAYS } from './seed-data.mjs';
+import {
+  CITIES,
+  INCITY_OPERATOR,
+  OPERATORS,
+  PASSENGERS,
+  SCHEDULE_DAYS,
+  SUBSCRIPTIONS,
+} from './seed-data.mjs';
 import { segmentBaseCents } from '../lib/booking/fares.ts';
+import { addDays, todayInToronto } from '../lib/time.ts';
 
 /* ------------------------------------------------------------------ setup */
 
@@ -91,6 +99,10 @@ async function removeAll() {
     await step('stops', db.from('stops').delete().in('operator_id', operatorIds));
     await step('vehicles', db.from('vehicles').delete().in('operator_id', operatorIds));
     await step('team', db.from('operator_members').delete().in('operator_id', operatorIds));
+    await step(
+      'subscription payments',
+      db.from('subscription_payments').delete().in('operator_id', operatorIds),
+    );
     await step('subscriptions', db.from('subscriptions').delete().in('operator_id', operatorIds));
     await step('operators', db.from('operators').delete().in('id', operatorIds));
   }
@@ -187,6 +199,10 @@ async function seedAll() {
   let scheduleCount = 0;
   let stopCount = 0;
 
+  // Kept so the subscription block below can find each business again by the
+  // slug its facts are written under.
+  const operatorIdBySlug = {};
+
   for (const op of OPERATORS) {
     const ownerId = await ensureUser(op.ownerEmail, op.ownerName, { phone: op.phone });
 
@@ -208,6 +224,7 @@ async function seedAll() {
       .single();
     if (opError) die(`Could not create ${op.name}`, opError);
     const operatorId = operator.id;
+    operatorIdBySlug[op.slug] = operatorId;
 
     await db
       .from('operator_members')
@@ -429,6 +446,45 @@ async function seedAll() {
     })),
   );
   console.log(`${INCITY_OPERATOR.name}: ${INCITY_OPERATOR.zones.length} zones (Phase 6 tables).`);
+
+  /* ---- subscriptions ---------------------------------------------------- */
+  // Never seeded before, so every environment opened /admin/subscriptions to
+  // seven operators and no data, and the past-due warning had no way to be
+  // seen at all without editing the database by hand. Second Line is overdue on
+  // purpose. Pending Line is absent on purpose — an operator with no subscription
+  // row is a state the screens have to render too.
+  const slugToOperator = { ...operatorIdBySlug, [INCITY_OPERATOR.slug]: incityOp.id };
+  let subscriptionCount = 0;
+
+  for (const [slug, plan] of Object.entries(SUBSCRIPTIONS)) {
+    const id = slugToOperator[slug];
+    if (!id) continue;
+
+    const paidThrough = addDays(todayInToronto(), plan.paidThrough);
+
+    const { error: subError } = await db.from('subscriptions').insert({
+      operator_id: id,
+      plan: plan.plan,
+      status: plan.status,
+      amount_cents: cents(plan.amount),
+      current_period_end: paidThrough,
+    });
+    if (subError) die(`Could not create the subscription for ${slug}`, subError);
+
+    // One payment behind each, so an operator opening Billing sees a history
+    // rather than an empty table under a number they are being asked to pay.
+    await db.from('subscription_payments').insert({
+      operator_id: id,
+      amount_cents: cents(plan.amount),
+      paid_on: addDays(paidThrough, plan.plan === 'weekly' ? -7 : -30),
+      covers_until: paidThrough,
+      note: 'e-transfer',
+    });
+
+    subscriptionCount += 1;
+  }
+
+  console.log(`${subscriptionCount} subscriptions, one of them past due.`);
 
   /* ---- bookings -------------------------------------------------------- */
   await seedBookings({ passengerIds, ratingRows, redFlagRows });

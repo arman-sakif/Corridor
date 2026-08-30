@@ -375,7 +375,7 @@ Each phase should be usable before the next begins.
 | **4** | Booking: the hold, `request_booking()`, approve/decline, cancellation, email | **built** |
 | **5** | Departure day: vehicle assignment, driver dashboard, manifest, completion, payment confirmation, ratings, red flags | **built** |
 | **6** | In-city add-on: zones, checkout add-on, separate approval | **built** |
-| **7** | Subscription tracking, then mobile apps | tables only |
+| **7** | Subscription tracking, then mobile apps | tracking **built**; mobile not started |
 
 **Phases 0–5 are the MVP** — a complete, sellable product: onboard an operator,
 publish a timetable, take real bookings, run the day, settle payment.

@@ -78,6 +78,15 @@ export type FeedbackKind = 'idea' | 'problem' | 'praise' | 'other';
 type Relationships = {
   profiles: [];
   auth_recovery_requests: [];
+  subscription_payments: [
+    {
+      foreignKeyName: 'subscription_payments_operator_id_fkey';
+      columns: ['operator_id'];
+      isOneToOne: false;
+      referencedRelation: 'operators';
+      referencedColumns: ['id'];
+    },
+  ];
   feedback: [
     {
       foreignKeyName: 'feedback_user_id_fkey';
@@ -478,6 +487,21 @@ export interface Database {
         'invited_by' | 'accepted_at' | 'accepted_by',
         'id' | 'created_at'
       >;
+      subscription_payments: Table<
+        'subscription_payments',
+        {
+          id: string;
+          operator_id: string;
+          amount_cents: number;
+          paid_on: string;
+          covers_until: string | null;
+          note: string | null;
+          recorded_by: string | null;
+          created_at: string;
+        },
+        'covers_until' | 'note' | 'recorded_by',
+        'id' | 'created_at'
+      >;
       reports: Table<
         'reports',
         {
@@ -586,9 +610,10 @@ export interface Database {
           operator_id: string;
           plan: SubscriptionPlan;
           status: SubscriptionStatus;
+          amount_cents: number;
           current_period_end: string | null;
         } & Timestamps,
-        'status' | 'current_period_end',
+        'status' | 'amount_cents' | 'current_period_end',
         'id' | 'created_at' | 'updated_at'
       >;
       cities: Table<
