@@ -6,9 +6,10 @@ import { PaymentConfirmForm } from './payment-form';
 import { RatingForm } from './rating-form';
 import { BookingStatusBadge } from '@/components/booking-status';
 import { cancelBooking } from '@/lib/booking/actions';
-import { Alert, Button, Card, PageHeader } from '@/components/ui';
+import { Alert, Button, ButtonLink, Card, PageHeader } from '@/components/ui';
 import { requireViewer } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { dynamicRoute } from '@/lib/routes';
 import { formatCents } from '@/lib/money';
 import { formatRelative, formatServiceDateLong, formatTime } from '@/lib/time';
 import type { BookingStatus, PaymentMethod } from '@/lib/supabase/database.types';
@@ -165,6 +166,31 @@ export default async function RideDetailPage({
             Paid to the driver on the day. Cash and e-transfer cost the same.
           </p>
         </Card>
+
+        {/*
+          A link and nothing more. In-city is an add-on that has to be
+          removable without touching the core booking flow, so this page
+          imports nothing from lib/incity and the copy says nothing that
+          depends on whether a local ride exists — everything the add-on knows
+          lives on the other side of this link.
+        */}
+        {booking.status === 'approved' ? (
+          <Card className="p-5">
+            <h2 className="font-semibold text-ink-900">Getting to the door</h2>
+            <p className="mt-1 text-sm text-ink-600">
+              Local operators run drop-offs from where your bus arrives, at a flat fare by area.
+            </p>
+            <div className="mt-4">
+              <ButtonLink
+                href={dynamicRoute(`/my-rides/${booking.id}/onward`)}
+                tone="secondary"
+                size="sm"
+              >
+                Local ride from your drop-off
+              </ButtonLink>
+            </div>
+          </Card>
+        ) : null}
 
         {awaitingPayment ? (
           <Card className="p-5">

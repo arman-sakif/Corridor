@@ -89,7 +89,7 @@ lib/
   auth/          session, role routing, auth actions
   booking/       fares, capacity, search, booking and departure-day actions
   operator/      setup actions
-  incity/        Phase 6 — isolated
+  incity/        the in-city add-on — isolated
   validation/    zod schemas
   notify.ts      the one seam every notification goes through
 supabase/
@@ -374,7 +374,7 @@ Each phase should be usable before the next begins.
 | **3** | Departure generation (rolling 30 days) and passenger search | **built** |
 | **4** | Booking: the hold, `request_booking()`, approve/decline, cancellation, email | **built** |
 | **5** | Departure day: vehicle assignment, driver dashboard, manifest, completion, payment confirmation, ratings, red flags | **built** |
-| **6** | In-city add-on: zones, checkout add-on, separate approval | tables and seed data only |
+| **6** | In-city add-on: zones, checkout add-on, separate approval | **built** |
 | **7** | Subscription tracking, then mobile apps | tables only |
 
 **Phases 0–5 are the MVP** — a complete, sellable product: onboard an operator,

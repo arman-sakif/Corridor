@@ -28,3 +28,6 @@ this file is the signpost:
 | `normalise_phone()`, `phone_in_use()` | `20260830000017_phone_uniqueness_check.sql` | Digits-only phone comparison, so a duplicate check does not have to select every profile. Service role only. |
 | `mark_notifications_read()` | `20260830000018_notifications.sql` | Sets read_at on the callers own notifications and nothing else. The table is read-only to the API. |
 | `accept_pending_invites()` | `20260830000019_operator_invites.sql` | Auth trigger — attaches memberships an owner recorded before the person signed up. Must fire after handle_new_user(). |
+| `request_incity_ride()` | `20260830000020_incity.sql` | The in-city add-on. Checks the parent booking, the operator, the zone and the pickup city, then snapshots the zone price. |
+| `approve_incity_ride()`, `decline_incity_ride()`, `cancel_incity_ride()` | `20260830000020_incity.sql` | Guarded status transitions for a local ride. |
+| `cancel_incity_on_parent()` | `20260830000020_incity.sql` | Trigger — a seat that goes away takes its local ride with it. |

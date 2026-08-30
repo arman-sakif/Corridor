@@ -34,7 +34,7 @@ publish a timetable, take real bookings, run the day, and settle payment.
 | 3 | Departure generation and passenger search | **built** |
 | 4 | Booking: the hold, capacity, approve/decline, cancellation | **built** |
 | 5 | Departure day: assignment, manifest, completion, settlement | **built** |
-| 6 | In-city add-on | tables and seed data only |
+| 6 | In-city add-on: zones, the checkout add-on, separate approval | **built** |
 | 7 | Subscription tracking, then mobile | tables only |
 
 Not yet wired: Google OAuth (needs credentials) and a notifications table for
