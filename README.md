@@ -13,13 +13,39 @@ The product is an **aggregator**. One passenger-facing site: search
 `Toronto → Windsor, Sept 3`, see every operator's departures that day side by
 side, request a seat on one.
 
-Design and rationale live in [`docs/architecture.md`](docs/architecture.md).
+**Live:** [corridor-cyan.vercel.app](https://corridor-cyan.vercel.app)
+
+Design and rationale: [`docs/architecture.md`](docs/architecture.md).
+The operator research the seed data is built from:
+[`the operator notes`](the operator notes).
+
+---
+
+## Status
+
+Phases 0–5 — the MVP — are built and deployed. An operator can be onboarded,
+publish a timetable, take real bookings, run the day, and settle payment.
+
+| Phase | Scope | State |
+|---|---|---|
+| 0 | Schema, RLS, auth, profiles, role routing | **built** |
+| 1 | Admin: vet operators, manage cities | **built** |
+| 2 | Operator setup: stops, routes, fares, timetable, fleet, team | **built** |
+| 3 | Departure generation and passenger search | **built** |
+| 4 | Booking: the hold, capacity, approve/decline, cancellation | **built** |
+| 5 | Departure day: assignment, manifest, completion, settlement | **built** |
+| 6 | In-city add-on | tables and seed data only |
+| 7 | Subscription tracking, then mobile | tables only |
+
+Not yet wired: Google OAuth (needs credentials), Resend (without a key
+`notify()` logs instead of sending), and a notifications table for the in-app
+list.
 
 ---
 
 ## Running it
 
-You need Node 22+ and a Supabase project. Everything else installs.
+Node 22+ and a Supabase project.
 
 ```bash
 npm install
@@ -31,14 +57,13 @@ npm run dev
 
 1. Create a project at [supabase.com](https://supabase.com). The free tier is
    enough.
-2. Copy the project URL and both keys from **Project settings → API** into
-   `.env.local`:
+2. Copy the project URL and both keys from **Project settings → API keys**:
    - the **publishable** key (`sb_publishable_…`) is the browser one — RLS is
      what protects the data behind it;
    - the **secret** key (`sb_secret_…`) is server-only and must never reach the
      client bundle.
 
-   Note the URL is `https://<ref>.supabase.co`, not the dashboard link.
+   The URL is `https://<ref>.supabase.co`, not the dashboard link.
 3. Apply the schema:
 
    ```bash
@@ -46,18 +71,16 @@ npm run dev
    npx supabase db push
    ```
 
-4. Enable **Google** and **Email** providers under **Authentication →
-   Providers**, and add `http://localhost:3000/auth/callback` to the redirect
-   allow list.
-
-There is no seed data. The first thing to do is make yourself a platform admin,
-which is deliberately not something the app can do — see below.
+4. **Authentication → URL Configuration**: set the Site URL to your deployed
+   origin and add both `https://<your-app>/auth/callback` and
+   `http://localhost:3000/auth/callback` to the redirect list. Email and
+   password auth is on by default; only Google needs extra credentials.
 
 ### Becoming a platform admin
 
 `platform_role` is not writable through any policy, and a trigger blocks the
 change unless it comes from a platform admin or the service role. A direct
-database session is exempt — someone holding one could disable the trigger
+database session is exempt — anyone holding one could disable the trigger
 anyway — so the first admin is granted from the SQL editor:
 
 ```sql
@@ -67,16 +90,33 @@ where id = (select id from auth.users where email = 'you@example.com');
 
 Then `/admin` lets you add cities and vet operators.
 
-### Table and function grants
+### Demo data
+
+```bash
+node scripts/seed.mjs           # build it
+node scripts/seed.mjs --remove  # take it back out
+```
+
+Builds the corridor described in `the operator notes`: 16 cities, 7
+operators, 33 stops, 12 routes, ~1000 departures, and ~230 bookings across
+every status. Every account signs in with `local-demo-password`;
+`harbour@example.com` owns the largest operator.
+
+The seed deliberately reproduces the awkward cases. Harbour sells
+Windsor→Toronto for $45 while its legs total $105 (matrix), Second Line sells
+the same pair for $93 (additive), one departure is full on its middle leg while
+both ends stay open, and Pearson is a second Toronto stop so the same search
+offers two drop-offs at different prices — one carrying the airport fee.
+
+### Grants
 
 This project was created with **"automatically expose new tables" off**, so
 Supabase grants the API roles nothing by default and the migrations grant
 everything explicitly. Two gates rather than one: `GRANT` decides whether a
-role may touch a table at all, RLS decides which rows once it may.
-
-If you create a project with that setting **on**, the app still works — you
-just have Supabase's defaults sitting underneath the explicit grants. The tests
-in `supabase/tests/grants.test.ts` describe the intended state either way.
+role may touch a table at all, RLS decides which rows once it may. If you
+create a project with that setting on, the app still works — you just have
+Supabase's defaults underneath. `supabase/tests/grants.test.ts` describes the
+intended state either way.
 
 ### The daily job
 
@@ -95,10 +135,12 @@ free themselves whether or not the sweep has run.
 | `npm run dev` | Development server. |
 | `npm run build` | Production build, including a full typecheck. |
 | `npm test` | Everything — unit tests and the database tests. |
-| `npm run test:unit` | Fares, capacity, money, and time. Fast. |
-| `npm run test:db` | The migrations, run against a real Postgres. |
+| `npm run test:unit` | Fares, capacity, money, time. Fast. |
+| `npm run test:db` | The real migrations against real Postgres. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm run db:types` | Regenerate `lib/supabase/database.types.ts` from a live schema. |
+| `node scripts/seed.mjs` | Rebuild the demo data. |
+| `node scripts/race-test.mjs` | Race the seat lock against the live database. |
 
 ### The database tests
 
@@ -106,14 +148,27 @@ free themselves whether or not the sweep has run.
 [PGlite](https://pglite.dev) — Postgres compiled to WebAssembly — with a
 minimal stand-in for Supabase's `auth` schema. No Docker, no running server.
 
-That means `request_booking()` under test is the same function that will run in
-production: the row lock, the per-leg scan, and the fare recomputation are
-genuinely exercised. Each call runs in its own transaction with `set local
-role` and JWT claims set the way PostgREST sets them, so RLS is tested as it
-will actually behave.
+`request_booking()` under test is therefore the function that runs in
+production. Each call runs in its own transaction with `set local role` and JWT
+claims set the way PostgREST sets them, so RLS behaves as it will live. The
+harness issues no blanket grant — it uses exactly what the grants migrations
+hand out, so the tests exercise production's real privilege set.
 
-Three real bugs came out of writing them, including a privilege escalation that
-let any signed-in user make themselves a platform admin. Run them.
+Writing them found three real bugs, including a privilege escalation that let
+any signed-in user make themselves a platform admin. Run them.
+
+### The race test
+
+`scripts/race-test.mjs` fires simultaneous requests at the live database, each
+on its own connection, which is the only way the row lock in
+`request_booking()` comes under the pressure it exists for.
+
+It checks that contention is refused **and that non-contention is not**: four
+passengers on disjoint legs must all succeed on a one-seat departure. A lock
+held too coarsely would pass the oversell check while silently collapsing
+per-leg capacity into per-departure capacity — a van that legitimately carries
+30 bookings across five stops would carry 14, and the only symptom would be
+revenue that never arrives.
 
 ---
 
@@ -127,14 +182,16 @@ app/
   (driver)/      today, manifest
   (admin)/       operator vetting, cities, subscriptions
   api/           manifest CSV, the daily job
+components/      UI primitives, icons, navigation
 lib/
-  booking/       fare calculation, capacity rules, search, actions
+  booking/       fares, capacity, search, booking and departure-day actions
   operator/      setup actions
-  supabase/      clients and generated types
+  supabase/      clients and types
   validation/    zod schemas
 supabase/
   migrations/    numbered SQL — schema, RLS, and every Postgres function
-  tests/         the migrations, run against a real Postgres
+  tests/         the migrations, run against real Postgres
+scripts/         seeding and the race test
 ```
 
 Two rules about these boundaries:
@@ -145,12 +202,16 @@ Two rules about these boundaries:
   it. In-city is a Phase 6 add-on and must be removable without touching the
   booking flow.
 
+Postgres functions live in `supabase/migrations/`, not `supabase/functions/`.
+A function is schema and has to replay in order onto a fresh database;
+`supabase/functions/README.md` indexes which migration defines what.
+
 ---
 
 ## The parts most likely to break
 
-Most of this app is CRUD. Four things are not, and each has a comment at the
-top of its file explaining why it is written the way it is.
+Most of this app is CRUD. Four things are not, and each carries a comment at
+the top of its file explaining why it is written the way it is.
 
 **Capacity is per leg, not per departure.** A 16-seat departure can carry far
 more than 16 bookings, as long as no single stretch between two stops exceeds
@@ -163,7 +224,7 @@ expired holds inline, so a seat frees itself the instant its hold lapses.
 Correctness never depends on a background job.
 
 **Fares are operator-defined, in two modes.** `matrix` is the default and the
-one these businesses actually use: Toronto→Windsor is priced explicitly and is
+one these businesses actually use: a through fare is priced explicitly and is
 *not* the sum of its legs. Directional fares are independent, because a route
 runs one way and the return trip is a different route.
 

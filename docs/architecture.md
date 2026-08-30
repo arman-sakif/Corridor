@@ -57,6 +57,15 @@ Postgres compiled to WebAssembly — so `request_booking()` under test is the
 same function that runs in production. Each call runs in its own transaction
 with `set local role` and JWT claims set the way PostgREST sets them, which
 makes RLS testable as it actually behaves rather than as it is intended to.
+The harness issues no blanket grant, so the tests exercise production's real
+privilege set rather than a more permissive one.
+
+What PGlite cannot do is contention: it is a single connection. The row lock in
+`request_booking()` is therefore raced separately by `scripts/race-test.mjs`,
+which fires simultaneous requests at a live database. It asserts both halves —
+that contention is refused, and that passengers on disjoint legs are *not*, since
+a lock held too coarsely would pass the first check while silently collapsing
+per-leg capacity into per-departure capacity.
 
 Phase 7 adds Android and iOS. That is the reason business logic stays
 server-side and in the database: the mobile apps re-use it rather than
@@ -114,7 +123,7 @@ synonyms.
 |---|---|
 | **Operator** | A rideshare business on the platform (`intercity` or `incity`). |
 | **City** | Global, admin-managed. Search happens at this level. |
-| **Stop** | A physical pickup/dropoff point in a city, defined *by an operator*. Booking happens at this level. |
+| **Stop** | A physical pickup/dropoff point in a city, defined *by an operator*. Booking happens at this level. An operator may have several in one city — Yorkdale and Pearson are both Toronto — and `is_airport` marks the ones that carry the airport fee. |
 | **Route** | An operator's ordered corridor of stops, in one direction. |
 | **Leg** | The span between two *consecutive* stops. A 5-stop route has 4 legs. |
 | **Segment** | Any bookable pair of stops. A 5-stop route has 10 forward segments. Passengers book segments; capacity is consumed on legs. |
@@ -122,6 +131,7 @@ synonyms.
 | **Departure** | One concrete instance of a schedule on one date. What a passenger books onto. |
 | **Booking** | One passenger's seats on one departure, from one stop to another. |
 | **Hold** | A booking awaiting operator approval. Occupies capacity. Expires in 1 hour. |
+| **Boarding** | One sellable stop-pair on a departure for a searched city pair. Several may exist for the same journey, priced independently. |
 | **Manifest** | The passenger list for one vehicle on one departure. |
 | **Red flag** | An operator's negative mark on a passenger after a trip. |
 
@@ -138,6 +148,12 @@ shape decisions worth stating outright:
   departure splits across two vans. Assignment is late-bound.
 - **No coordinates anywhere.** Stops are a fixed operator-defined list, and
   in-city uses flat-priced zones. There is no map or geocoding in the MVP.
+- **`departures.route_id` is ON DELETE RESTRICT**, deliberately: a route with
+  sold departures must not be deletable, or an operator tidying up their routes
+  would take paid bookings with them. The same guard sits on
+  `bookings.from_stop_id` and `departure_vehicles.vehicle_id`. Anything that
+  removes an operator has to unwind child-first rather than lean on the
+  cascade — `scripts/seed.mjs` shows the order.
 
 ---
 
@@ -214,8 +230,16 @@ lapses. A scheduled job may later flip stale rows to `expired` for display, but
 - **`additive`** — each consecutive leg is priced, and a segment costs the sum
   of the legs it spans. $35 + $30 means Toronto→Windsor is $65.
 
-Surcharges are fixed amounts set by the operator: per luggage item over the free
-allowance, and a flat airport fee. Cash and e-transfer are the same price.
+Surcharges are fixed amounts set by the operator: per luggage item beyond a
+per-seat free allowance, and a flat fee when either end of the trip is a stop
+marked `is_airport`. Cash and e-transfer are the same price, and nothing in the
+model can make them differ.
+
+Because a city can hold both an ordinary stop and an airport one — Yorkdale and
+Pearson are both Toronto — the same search can return two boardings at very
+different totals. Search therefore quotes the **all-in** price rather than the
+base fare: a card advertising $45 for a journey that costs $105 is worse than a
+card with no price on it.
 
 The fare is **always recomputed server-side at booking time** from the
 operator's fare rows, and the result is snapshotted onto the booking so later
@@ -350,7 +374,7 @@ Each phase should be usable before the next begins.
 | **3** | Departure generation (rolling 30 days) and passenger search | **built** |
 | **4** | Booking: the hold, `request_booking()`, approve/decline, cancellation, email | **built** |
 | **5** | Departure day: vehicle assignment, driver dashboard, manifest, completion, payment confirmation, ratings, red flags | **built** |
-| **6** | In-city add-on: zones, checkout add-on, separate approval | tables only |
+| **6** | In-city add-on: zones, checkout add-on, separate approval | tables and seed data only |
 | **7** | Subscription tracking, then mobile apps | tables only |
 
 **Phases 0–5 are the MVP** — a complete, sellable product: onboard an operator,
@@ -401,3 +425,21 @@ The ten mistakes most likely to be made in this codebase:
 8. Building a driver-side "post a ride" flow. Operators publish schedules.
 9. Reaching for a maps or geocoding API. No coordinates are needed anywhere.
 10. Floats for money. Integer cents.
+
+Five more, learned the hard way once the schema met a real database:
+
+11. **Assuming an RLS policy protects a column.** It governs rows. A user
+    allowed to update their own row can reach every column of it, which is how
+    `platform_role` was self-grantable until a trigger closed it.
+12. **Adding a Postgres function without a deliberate grant, or granting it to
+    the wrong role.** `generate_departures` was granted to `authenticated` but
+    called by the cron as `service_role`; the job would have half-failed
+    weeks later with departures quietly thinning out.
+13. **Trusting `insert … returning` under RLS.** The SELECT policies are checked
+    against the new row *before* AFTER triggers fire, so a row whose visibility
+    depends on a trigger is invisible at exactly that moment.
+14. **Letting PostgREST silently truncate.** A select caps at 1000 rows and an
+    RPC the caller cannot execute returns `null` data rather than throwing.
+    Both read as an answer.
+15. **Unwinding a delete through a RESTRICT.** Removing an operator cannot lean
+    on the cascade; departures must go before routes.
