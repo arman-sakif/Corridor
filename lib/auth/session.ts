@@ -11,7 +11,15 @@ import type { OperatorMemberRole, Tables } from '@/lib/supabase/database.types';
 export type Membership = {
   operator_id: string;
   role: OperatorMemberRole;
-  operator: { id: string; name: string; status: Tables<'operators'>['status'] } | null;
+  operator: {
+    id: string;
+    name: string;
+    status: Tables<'operators'>['status'];
+    // Carried so the operator dashboard can show the right tabs. An in-city
+    // business has no routes, timetable or fleet, and was being offered all
+    // three because this was not here to check.
+    type: Tables<'operators'>['type'];
+  } | null;
 };
 
 export type Viewer = {
@@ -40,7 +48,7 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
     supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
     supabase
       .from('operator_members')
-      .select('operator_id, role, operator:operators(id, name, status)')
+      .select('operator_id, role, operator:operators(id, name, status, type)')
       .eq('user_id', user.id),
   ]);
 

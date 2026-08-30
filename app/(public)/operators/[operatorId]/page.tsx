@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 
 import { Badge, Card, EmptyState } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { formatCents } from '@/lib/money';
 
 export const metadata: Metadata = { title: 'Operator' };
 
@@ -27,6 +28,20 @@ export default async function OperatorProfilePage({
     .maybeSingle();
 
   if (!operator) notFound();
+
+  // An in-city business publishes zones, not routes. Rendering the intercity
+  // shape for one produced a profile page that said 'No routes published yet'
+  // about a company whose whole offering is a price list.
+  const isIncity = operator.type === 'incity';
+
+  const { data: zones } = isIncity
+    ? await supabase
+        .from('incity_zones')
+        .select('id, name, flat_price_cents')
+        .eq('operator_id', operatorId)
+        .eq('is_active', true)
+        .order('flat_price_cents')
+    : { data: null };
 
   const [{ data: routes }, { data: ratings }] = await Promise.all([
     supabase
@@ -73,9 +88,27 @@ export default async function OperatorProfilePage({
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold tracking-wide text-ink-500 uppercase">
-          Where they run
+          {isIncity ? 'Where they drop off' : 'Where they run'}
         </h2>
-        {(routes ?? []).length === 0 ? (
+        {isIncity ? (
+          (zones ?? []).length === 0 ? (
+            <p className="mt-3 text-sm text-ink-500">No areas on sale yet.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {(zones ?? []).map((zone) => (
+                <li
+                  key={zone.id}
+                  className="flex items-baseline justify-between rounded-xl bg-white p-4 ring-1 ring-ink-200"
+                >
+                  <span className="font-medium text-ink-900">{zone.name}</span>
+                  <span className="numeric text-ink-700">
+                    {formatCents(zone.flat_price_cents)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : (routes ?? []).length === 0 ? (
           <p className="mt-3 text-sm text-ink-500">No routes published yet.</p>
         ) : (
           <ul className="mt-3 space-y-2">

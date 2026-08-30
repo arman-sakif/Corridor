@@ -407,6 +407,19 @@ async function seedAll() {
     .single();
   if (incityError) die('Could not create the in-city operator', incityError);
 
+  // The pickup points come first: matching is by city, so an in-city operator
+  // with no stop anywhere is offered to nobody however many zones it prices.
+  const { error: pickupError } = await db.from('stops').insert(
+    INCITY_OPERATOR.pickups.map((pickup) => ({
+      operator_id: incityOp.id,
+      city_id: cityId[pickup.city],
+      label: pickup.label,
+      description: pickup.description ?? null,
+      is_active: true,
+    })),
+  );
+  if (pickupError) die('Could not create the in-city pickup points', pickupError);
+
   await db.from('incity_zones').insert(
     INCITY_OPERATOR.zones.map(([name, price]) => ({
       operator_id: incityOp.id,
@@ -423,7 +436,11 @@ async function seedAll() {
   console.log(`\nSummary`);
   console.log(`  cities      ${CITIES.length}`);
   console.log(`  operators   ${OPERATORS.length + 1}`);
-  console.log(`  stops       ${stopCount}`);
+  // stopCount is tallied in the intercity loop, which runs before the in-city
+  // operator exists. Its pickup points are stops too, so counting them here
+  // keeps the summary honest rather than two short.
+  console.log(`  stops       ${stopCount + INCITY_OPERATOR.pickups.length}`);
+  console.log(`  zones       ${INCITY_OPERATOR.zones.length}`);
   console.log(`  routes      ${routeCount}`);
   console.log(`  schedules   ${scheduleCount}`);
   console.log(`  departures  ${departureCount}`);

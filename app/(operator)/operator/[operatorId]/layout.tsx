@@ -5,7 +5,7 @@ import { NavTabs } from '@/components/nav';
 import { requireViewer } from '@/lib/auth/session';
 import { Alert, Badge } from '@/components/ui';
 
-const tabs = [
+const intercityTabs = [
   { segment: '', label: 'Overview' },
   { segment: '/bookings', label: 'Requests' },
   { segment: '/departures', label: 'Departures' },
@@ -13,6 +13,21 @@ const tabs = [
   { segment: '/routes', label: 'Routes & fares' },
   { segment: '/stops', label: 'Stops' },
   { segment: '/fleet', label: 'Fleet' },
+  { segment: '/team', label: 'Team' },
+  { segment: '/settings', label: 'Settings' },
+] as const;
+
+/**
+ * An in-city business runs no timetable, owns no routes and books no
+ * departures — it sells a flat-priced ride from a pickup point to a zone. It
+ * was being shown all nine tabs regardless, so its owner landed on Routes &
+ * fares, Timetable and Fleet, none of which mean anything to them.
+ */
+const incityTabs = [
+  { segment: '', label: 'Overview' },
+  { segment: '/incity', label: 'Requests' },
+  { segment: '/zones', label: 'Zones' },
+  { segment: '/stops', label: 'Pickup points' },
   { segment: '/team', label: 'Team' },
   { segment: '/settings', label: 'Settings' },
 ] as const;
@@ -35,6 +50,7 @@ export default async function OperatorLayout({
   if (!membership) notFound();
 
   const operator = membership.operator;
+  const tabs = operator?.type === 'incity' ? incityTabs : intercityTabs;
 
   return (
     <div className="flex min-h-dvh flex-col">

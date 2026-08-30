@@ -11,12 +11,17 @@ export default async function OperatorsPage() {
 
   // RLS shows only active operators here, so a pending or suspended business
   // is invisible without any filter of our own.
+  // Filtered in the query rather than afterwards. PostgREST caps a select at
+  // 1000 rows, so filtering the page in memory would start silently dropping
+  // intercity operators the moment the table outgrew that — and a short list
+  // reads exactly like a complete one.
   const { data: operators } = await supabase
     .from('operators')
     .select('id, name, bio, public_phone, type')
+    .eq('type', 'intercity')
     .order('name');
 
-  const rows = (operators ?? []).filter((operator) => operator.type === 'intercity');
+  const rows = operators ?? [];
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
