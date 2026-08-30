@@ -26,3 +26,4 @@ this file is the signpost:
 | `approve_booking()`, `decline_booking()`, `cancel_booking()` | `20260829000005_booking.sql` | Guarded status transitions. |
 | `expire_stale_holds()` | `20260829000005_booking.sql` | Cosmetic sweep. Capacity does not depend on it running. |
 | `normalise_phone()`, `phone_in_use()` | `20260830000017_phone_uniqueness_check.sql` | Digits-only phone comparison, so a duplicate check does not have to select every profile. Service role only. |
+| `mark_notifications_read()` | `20260830000018_notifications.sql` | Sets read_at on the callers own notifications and nothing else. The table is read-only to the API. |

@@ -3,6 +3,7 @@ import 'server-only';
 import { Resend } from 'resend';
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import type { NotificationKind as StoredNotificationKind } from '@/lib/supabase/database.types';
 import { siteUrl } from '@/lib/supabase/env';
 
 /**
@@ -49,21 +50,50 @@ export type Notification = {
   to?: string[];
 };
 
+/**
+ * A person to tell. The id is what files the in-app notification, the address
+ * is what sends the email, and either can be missing: account recovery knows
+ * an address and deliberately not who it belongs to.
+ */
+type Recipient = { userId: string | null; email: string | null };
+
+/**
+ * The kinds that carry a credential, and are therefore emailed and never
+ * filed. Their recipient is by definition locked out, so an in-app list is the
+ * one place they cannot look — and a working sign-in code is not something to
+ * leave sitting in a table. `notification_kind` in the database omits them
+ * too, so a slip here fails at the insert rather than quietly succeeding.
+ */
+const CREDENTIAL_KINDS: NotificationKind[] = ['login_code', 'password_reset'];
+
 export async function notify(notification: Notification): Promise<void> {
   try {
     const recipients = await resolveRecipients(notification);
     if (recipients.length === 0) return;
 
-    await deliver(recipients, notification);
+    // Filed first. Email is the channel most likely to fail — no key, an
+    // unverified sender, a bounce — and the in-app copy is what the reader
+    // actually has a way of seeing.
+    await file(recipients, notification);
+
+    const addresses = recipients
+      .map((recipient) => recipient.email)
+      .filter((email): email is string => Boolean(email));
+
+    if (addresses.length > 0) await deliver(addresses, notification);
   } catch (error) {
     // Never let a notification failure roll back or block the caller.
     console.error('notify failed', notification.kind, error);
   }
 }
 
-async function resolveRecipients(notification: Notification): Promise<string[]> {
-  // An address the caller already has needs no lookup at all.
-  if (notification.to?.length) return notification.to;
+async function resolveRecipients(notification: Notification): Promise<Recipient[]> {
+  // An address the caller already has needs no lookup at all — and recovery
+  // must not turn one into a user id, which is the question it refuses to
+  // answer everywhere else.
+  if (notification.to?.length) {
+    return notification.to.map((email) => ({ userId: null, email }));
+  }
 
   // Reading someone else's email address is exactly what the service-role key
   // is for: no policy should expose auth.users to a passenger or an operator.
@@ -71,7 +101,7 @@ async function resolveRecipients(notification: Notification): Promise<string[]> 
 
   if (notification.passengerId) {
     const { data } = await admin.auth.admin.getUserById(notification.passengerId);
-    return data.user?.email ? [data.user.email] : [];
+    return [{ userId: notification.passengerId, email: data.user?.email ?? null }];
   }
 
   if (notification.operatorId) {
@@ -81,17 +111,42 @@ async function resolveRecipients(notification: Notification): Promise<string[]> 
       .eq('operator_id', notification.operatorId)
       .in('role', ['owner', 'staff']);
 
-    const emails = await Promise.all(
+    return Promise.all(
       (members ?? []).map(async (member) => {
         const { data } = await admin.auth.admin.getUserById(member.user_id);
-        return data.user?.email ?? null;
+        return { userId: member.user_id, email: data.user?.email ?? null };
       }),
     );
-
-    return emails.filter((email): email is string => Boolean(email));
   }
 
   return [];
+}
+
+/**
+ * Writes the in-app copy — the one that works with no sending domain, no SMS
+ * provider, and nobody's inbox involved.
+ */
+async function file(recipients: Recipient[], notification: Notification): Promise<void> {
+  if (CREDENTIAL_KINDS.includes(notification.kind)) return;
+
+  const rows = recipients
+    .filter((recipient) => recipient.userId)
+    .map((recipient) => ({
+      user_id: recipient.userId!,
+      kind: notification.kind as StoredNotificationKind,
+      subject: notification.subject,
+      body: notification.body,
+      link: notification.link ?? null,
+      booking_id: notification.bookingId ?? null,
+    }));
+
+  if (rows.length === 0) return;
+
+  const { error } = await createAdminClient().from('notifications').insert(rows);
+
+  // Logged, never thrown: an approval that went through and a notification
+  // that did not is still an approval that went through.
+  if (error) console.error('[notify] could not file in-app copy', notification.kind, error);
 }
 
 async function deliver(recipients: string[], notification: Notification): Promise<void> {

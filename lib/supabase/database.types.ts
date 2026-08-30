@@ -20,6 +20,18 @@ export type DepartureStatus = 'scheduled' | 'cancelled' | 'completed';
 export type PaymentMethod = 'cash' | 'etransfer';
 export type RatingDirection = 'passenger_to_operator' | 'operator_to_passenger';
 
+/**
+ * The kinds that can be filed as an in-app notification. Deliberately excludes
+ * login_code and password_reset — see 20260830000018_notifications.sql.
+ */
+export type NotificationKind =
+  | 'seat_requested'
+  | 'booking_approved'
+  | 'booking_declined'
+  | 'booking_cancelled'
+  | 'departure_tomorrow'
+  | 'payment_reminder';
+
 export type BookingStatus =
   | 'held'
   | 'approved'
@@ -49,6 +61,22 @@ export type IncityBookingStatus = 'held' | 'approved' | 'declined' | 'cancelled'
 type Relationships = {
   profiles: [];
   auth_recovery_requests: [];
+  notifications: [
+    {
+      foreignKeyName: 'notifications_user_id_fkey';
+      columns: ['user_id'];
+      isOneToOne: false;
+      referencedRelation: 'profiles';
+      referencedColumns: ['id'];
+    },
+    {
+      foreignKeyName: 'notifications_booking_id_fkey';
+      columns: ['booking_id'];
+      isOneToOne: false;
+      referencedRelation: 'bookings';
+      referencedColumns: ['id'];
+    },
+  ];
   operators: [
     {
       foreignKeyName: 'operators_created_by_fkey';
@@ -370,6 +398,22 @@ type Timestamps = { created_at: string; updated_at: string };
 export interface Database {
   public: {
     Tables: {
+      notifications: Table<
+        'notifications',
+        {
+          id: string;
+          user_id: string;
+          kind: NotificationKind;
+          subject: string;
+          body: string;
+          link: string | null;
+          booking_id: string | null;
+          read_at: string | null;
+          created_at: string;
+        },
+        'link' | 'booking_id' | 'read_at',
+        'id' | 'created_at'
+      >;
       auth_recovery_requests: Table<
         'auth_recovery_requests',
         { email_hash: string; requested_at: string },
@@ -746,6 +790,10 @@ export interface Database {
           red_flags: number;
         }[];
       };
+      mark_notifications_read: {
+        Args: { p_ids?: string[] | null };
+        Returns: number;
+      };
       phone_in_use: {
         Args: { p_phone: string; p_exclude?: string | null };
         Returns: boolean;
@@ -764,6 +812,7 @@ export interface Database {
       rating_direction: RatingDirection;
       booking_status: BookingStatus;
       red_flag_reason: RedFlagReason;
+      notification_kind: NotificationKind;
       incity_booking_status: IncityBookingStatus;
     };
     CompositeTypes: Record<string, never>;
