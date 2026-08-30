@@ -325,7 +325,12 @@ async function main() {
   check(
     bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf,
     'BOM-prefixed so Excel reads UTF-8 properly',
-    `first bytes ${bytes.slice(0, 3).map((b) => b.toString(16)).join(' ')}`,
+    // Array.from first, and not by accident. `bytes` is a Uint8Array, and a
+    // typed array's map() returns another typed array — it coerces whatever
+    // the callback returns back to a number, so 'ef' becomes NaN becomes 0 and
+    // the line reads "first bytes 0 0 0" while the assertion beside it passes.
+    // A diagnostic that lies only when you need it is worse than none.
+    `first bytes ${Array.from(bytes.slice(0, 3), (b) => b.toString(16)).join(' ')}`,
   );
   check(
     csv.includes('Loop Tester') && csv.includes('519-555-0147'),

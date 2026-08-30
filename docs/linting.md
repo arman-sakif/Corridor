@@ -66,3 +66,25 @@ Two more turned up in the recovery form written the same day: an `autoFocus`
 derived during render instead.
 
 None of them would have broken anything today. That is the point of running it.
+
+## One the linter got wrong
+
+The first run flagged a spread in the manifest test as useless:
+
+    `first bytes ${[...bytes.slice(0, 3)].map((b) => b.toString(16)).join(' ')}`
+
+It was not. `bytes` is a `Uint8Array`, and a typed array's `map()` returns
+another typed array — it coerces whatever the callback returns back to a
+number, so `'ef'` became `NaN` became `0`. The spread was what turned it into a
+real array first.
+
+Removing it did not fail anything. The assertion on the next line reads the
+bytes directly and kept passing; only the message changed, from
+`first bytes ef bb bf` to `first bytes 0 0 0` — a diagnostic that lies exactly
+when you need it. It was caught by running the suite and reading the output,
+not by any check.
+
+It now uses `Array.from(bytes.slice(0, 3), (b) => b.toString(16))`, which says
+what it means and does not trip the rule. The lesson is not to switch the rule
+off: it is right nearly always, and typed arrays are the exception worth
+knowing. Read what a rule is telling you before applying its fix.
