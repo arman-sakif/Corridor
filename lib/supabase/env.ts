@@ -44,6 +44,24 @@ export function supabaseServiceRoleKey(): string {
   );
 }
 
+/**
+ * The absolute origin, used for OAuth redirects and links in email.
+ *
+ * Getting this wrong fails quietly and confusingly: a deployed app that still
+ * thinks it is on localhost sends people a confirmation link to their own
+ * machine. So rather than defaulting straight to localhost, fall back to the
+ * URL Vercel injects — the production domain when there is one, the
+ * per-deployment URL on a preview.
+ *
+ * `NEXT_PUBLIC_SITE_URL` still wins when set, which is what you want for a
+ * custom domain.
+ */
 export function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+
+  const vercelHost =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+  if (vercelHost) return `https://${vercelHost}`;
+
+  return 'http://localhost:3000';
 }
