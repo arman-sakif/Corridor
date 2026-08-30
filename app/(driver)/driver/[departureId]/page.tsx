@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { DriverFlagForm } from './driver-flag-form';
 import { SiteHeader } from '@/components/site-header';
 import { BookingStatusBadge } from '@/components/booking-status';
 import { completeDeparture, confirmPaymentAsDriver, markNoShow } from '@/lib/booking/day-actions';
@@ -192,6 +193,18 @@ export default async function DriverManifestPage({
                             </Button>
                           </form>
                         </div>
+                      ) : null}
+
+                      {/*
+                        The person who was actually in the van could not do
+                        this until now: red_flags_insert_operator requires a
+                        manager, so the driver's only marks were the two
+                        automatic ones, neither of which carries a word of
+                        explanation. raise_red_flag() admits the assigned
+                        driver.
+                      */}
+                      {rider.status !== 'no_show' ? (
+                        <DriverFlagForm bookingId={rider.id} />
                       ) : null}
                     </div>
                   </div>

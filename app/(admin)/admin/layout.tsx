@@ -5,6 +5,8 @@ import { requireAdmin } from '@/lib/auth/session';
 const tabs = [
   { href: '/admin', label: 'Operators' },
   { href: '/admin/cities', label: 'Cities' },
+  { href: '/admin/complaints', label: 'Complaints' },
+  { href: '/admin/feedback', label: 'Feedback' },
   { href: '/admin/subscriptions', label: 'Subscriptions' },
 ] as const;
 

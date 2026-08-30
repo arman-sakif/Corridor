@@ -354,9 +354,9 @@ export default async function DepartureDayPage({
 
           {departure.status === 'completed' ? (
             <Card className="p-5">
-              <h2 className="font-semibold text-ink-900">Report a problem</h2>
+              <h2 className="font-semibold text-ink-900">Flag this passenger</h2>
               <p className="mt-1 mb-4 text-sm text-ink-600">
-                Recorded against the passenger and visible to other operators.
+                Recorded against the passenger and visible to other operators when they next request a seat. A passenger reporting you is a different thing, and arrives in Complaints.
               </p>
               <RedFlagForm passengers={riding.map((p) => ({
                 id: p.id,

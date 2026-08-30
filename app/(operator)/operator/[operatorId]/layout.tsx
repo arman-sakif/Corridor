@@ -13,6 +13,7 @@ const intercityTabs = [
   { segment: '/routes', label: 'Routes & fares' },
   { segment: '/stops', label: 'Stops' },
   { segment: '/fleet', label: 'Fleet' },
+  { segment: '/complaints', label: 'Complaints' },
   { segment: '/team', label: 'Team' },
   { segment: '/settings', label: 'Settings' },
 ] as const;
@@ -28,6 +29,7 @@ const incityTabs = [
   { segment: '/incity', label: 'Requests' },
   { segment: '/zones', label: 'Zones' },
   { segment: '/stops', label: 'Pickup points' },
+  { segment: '/complaints', label: 'Complaints' },
   { segment: '/team', label: 'Team' },
   { segment: '/settings', label: 'Settings' },
 ] as const;

@@ -28,6 +28,9 @@ export type NotificationKind =
   | 'incity_requested'
   | 'incity_approved'
   | 'incity_declined'
+  | 'report_filed'
+  | 'report_resolved'
+  | 'feedback_filed'
   | 'login_code'
   | 'password_reset';
 
@@ -42,6 +45,15 @@ export type Notification = {
   passengerId?: string;
   /** Send to everyone who can act for this operator (owners and staff). */
   operatorId?: string;
+  /**
+   * Send to every platform admin.
+   *
+   * A complaint reaches two audiences at once — the operator, who has to fix
+   * it, and the platform, which has to know it happened. They are separate
+   * calls rather than one recipient list, because they are separate messages:
+   * the operator is told about their own trip, the admin about a pattern.
+   */
+  platformAdmins?: boolean;
   /**
    * Send to an address directly, without looking a user up first.
    *
@@ -114,15 +126,35 @@ async function resolveRecipients(notification: Notification): Promise<Recipient[
       .eq('operator_id', notification.operatorId)
       .in('role', ['owner', 'staff']);
 
-    return Promise.all(
-      (members ?? []).map(async (member) => {
-        const { data } = await admin.auth.admin.getUserById(member.user_id);
-        return { userId: member.user_id, email: data.user?.email ?? null };
-      }),
-    );
+    return withEmails(members?.map((member) => member.user_id) ?? []);
+  }
+
+  if (notification.platformAdmins) {
+    // Nothing else in the codebase resolves who the admins are — the role is a
+    // column on profiles with a partial index and no helper. This is that
+    // helper, and it stays here rather than in a query module because the
+    // service-role key is what makes reading other people's rows legitimate.
+    const { data: admins } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('platform_role', 'admin');
+
+    return withEmails(admins?.map((row) => row.id) ?? []);
   }
 
   return [];
+}
+
+/** Pairs user ids with the addresses only the service role may read. */
+async function withEmails(userIds: string[]): Promise<Recipient[]> {
+  const admin = createAdminClient();
+
+  return Promise.all(
+    userIds.map(async (userId) => {
+      const { data } = await admin.auth.admin.getUserById(userId);
+      return { userId, email: data.user?.email ?? null };
+    }),
+  );
 }
 
 /**

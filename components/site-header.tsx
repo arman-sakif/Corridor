@@ -71,6 +71,7 @@ export async function SiteHeader() {
                   </span>
                 ) : null}
               </Link>
+              <NavLink href="/feedback">Tell us</NavLink>
               <NavLink href="/profile">Profile</NavLink>
 
               <form action={signOut} className="shrink-0">
