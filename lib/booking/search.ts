@@ -29,6 +29,8 @@ export type Boarding = {
   toStopDescription: string | null;
   toSeq: number;
   baseCents: number;
+  /** The operator's flat airport fee, when either end is an airport. */
+  airportCents: number;
   seatsLeft: number;
 };
 
@@ -36,7 +38,7 @@ export type SearchResult = {
   departureId: string;
   serviceDate: ServiceDate;
   departureTime: string;
-  operator: { id: string; name: string; publicPhone: string | null };
+  operator: { id: string; name: string; publicPhone: string | null; airportFeeCents: number };
   routeName: string;
   maxSeats: number;
   /** Cheapest boarding, which is what the result card leads with. */
@@ -50,7 +52,14 @@ type RouteShape = {
   name: string;
   operator_id: string;
   pricing_mode: PricingMode;
-  stops: { seq: number; stopId: string; cityId: string; label: string; description: string | null }[];
+  stops: {
+    seq: number;
+    stopId: string;
+    cityId: string;
+    label: string;
+    description: string | null;
+    isAirport: boolean;
+  }[];
   fares: FareRow[];
 };
 
@@ -80,8 +89,8 @@ export async function searchDepartures({
     .from('routes')
     .select(
       `id, name, operator_id, pricing_mode,
-       operator:operators!inner(id, name, public_phone, status),
-       route_stops(seq, stop:stops(id, city_id, label, description)),
+       operator:operators!inner(id, name, public_phone, status, airport_fee_cents),
+       route_stops(seq, stop:stops(id, city_id, label, description, is_airport)),
        fares(from_seq, to_seq, price_cents)`,
     )
     .eq('is_active', true)
@@ -89,7 +98,10 @@ export async function searchDepartures({
 
   if (!routeRows?.length) return [];
 
-  const operators = new Map<string, { id: string; name: string; publicPhone: string | null }>();
+  const operators = new Map<
+    string,
+    { id: string; name: string; publicPhone: string | null; airportFeeCents: number }
+  >();
   const routes = new Map<string, RouteShape>();
 
   for (const row of routeRows) {
@@ -97,6 +109,7 @@ export async function searchDepartures({
       id: string;
       name: string;
       public_phone: string | null;
+      airport_fee_cents: number;
     } | null;
     if (!operator) continue;
 
@@ -104,6 +117,7 @@ export async function searchDepartures({
       id: operator.id,
       name: operator.name,
       publicPhone: operator.public_phone,
+      airportFeeCents: operator.airport_fee_cents ?? 0,
     });
 
     routes.set(row.id, {
@@ -118,6 +132,7 @@ export async function searchDepartures({
           cityId: rs.stop?.city_id ?? '',
           label: rs.stop?.label ?? '',
           description: rs.stop?.description ?? null,
+          isAirport: rs.stop?.is_airport ?? false,
         }))
         .sort((a, b) => a.seq - b.seq),
       fares: row.fares ?? [],
@@ -187,7 +202,13 @@ export async function searchDepartures({
           busiest = Math.max(busiest, perLeg.get(leg) ?? 0);
         }
 
+        // A card showing $45 for a trip that costs $105 is worse than no
+        // price at all, so the airport fee travels with the boarding.
+        const airportCents =
+          from.isAirport || to.isAirport ? (operators.get(departure.operator_id)?.airportFeeCents ?? 0) : 0;
+
         boardings.push({
+          airportCents,
           fromStopId: from.stopId,
           fromStopLabel: from.label,
           fromStopDescription: from.description,
@@ -205,7 +226,9 @@ export async function searchDepartures({
     const sellable = boardings.filter((boarding) => boarding.seatsLeft >= seats);
     if (sellable.length === 0) continue;
 
-    sellable.sort((a, b) => a.baseCents - b.baseCents);
+    // Cheapest all-in, not cheapest base — otherwise an airport boarding
+    // could lead the card at a price nobody can actually pay.
+    sellable.sort((a, b) => a.baseCents + a.airportCents - (b.baseCents + b.airportCents));
 
     const operator = operators.get(departure.operator_id);
     if (!operator) continue;
@@ -217,7 +240,7 @@ export async function searchDepartures({
       operator,
       routeName: route.name,
       maxSeats: departure.max_seats,
-      fromCents: sellable[0]!.baseCents,
+      fromCents: sellable[0]!.baseCents + sellable[0]!.airportCents,
       seatsLeft: Math.max(...sellable.map((b) => b.seatsLeft)),
       boardings: sellable,
     });
