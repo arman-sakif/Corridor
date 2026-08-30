@@ -325,7 +325,7 @@ async function main() {
   check(
     bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf,
     'BOM-prefixed so Excel reads UTF-8 properly',
-    `first bytes ${[...bytes.slice(0, 3)].map((b) => b.toString(16)).join(' ')}`,
+    `first bytes ${bytes.slice(0, 3).map((b) => b.toString(16)).join(' ')}`,
   );
   check(
     csv.includes('Loop Tester') && csv.includes('519-555-0147'),

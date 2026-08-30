@@ -325,30 +325,35 @@ export async function departureBoardings({
   const perLeg = new Map<number, number>();
   for (const load of loads ?? []) perLeg.set(load.leg_start, load.seats_taken);
 
-  const boardings = stops.flatMap((from) =>
-    stops
-      .filter((to) => to.seq > from.seq)
-      .filter((to) => !fromCityId || from.cityId === fromCityId)
-      .filter((to) => !toCityId || to.cityId === toCityId)
-      .flatMap((to) => {
-        const baseCents = priced.get(`${from.seq}-${to.seq}`);
-        if (baseCents === undefined) return [];
+  const boardings = stops
+    // The origin filter belongs out here. It was inside the inner chain,
+    // written as a predicate on `to` that only ever read `from` — so it was
+    // invariant across the whole inner loop, keeping every pair or discarding
+    // every pair, and re-deciding that for each one.
+    .filter((from) => !fromCityId || from.cityId === fromCityId)
+    .flatMap((from) =>
+      stops
+        .filter((to) => to.seq > from.seq)
+        .filter((to) => !toCityId || to.cityId === toCityId)
+        .flatMap((to) => {
+          const baseCents = priced.get(`${from.seq}-${to.seq}`);
+          if (baseCents === undefined) return [];
 
-        let busiest = 0;
-        for (let leg = from.seq; leg < to.seq; leg += 1) {
-          busiest = Math.max(busiest, perLeg.get(leg) ?? 0);
-        }
+          let busiest = 0;
+          for (let leg = from.seq; leg < to.seq; leg += 1) {
+            busiest = Math.max(busiest, perLeg.get(leg) ?? 0);
+          }
 
-        return [
-          {
-            from,
-            to,
-            baseCents,
-            seatsLeft: Math.max(0, departure.max_seats - busiest),
-          },
-        ];
-      }),
-  );
+          return [
+            {
+              from,
+              to,
+              baseCents,
+              seatsLeft: Math.max(0, departure.max_seats - busiest),
+            },
+          ];
+        }),
+    );
 
   return {
     id: departure.id,

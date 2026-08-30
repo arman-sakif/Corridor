@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "react",
+    "nextjs",
+    "typescript",
+    "unicorn",
+    "import",
+    "jsx-a11y",
+    "oxc",
+    "promise"
+  ],
+  "categories": {
+    "correctness": "warn",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "import/no-unassigned-import": "off",
+    "unicorn/no-new-array": "off",
+    "unicorn/no-array-sort": "off",
+    "unicorn/no-array-reverse": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "no-underscore-dangle": "off",
+    "jsx-a11y/label-has-associated-control": "off",
+    "jsx-a11y/no-autofocus": "off"
+  },
+  "ignorePatterns": [
+    ".next",
+    "node_modules",
+    "next-env.d.ts"
+  ]
+}

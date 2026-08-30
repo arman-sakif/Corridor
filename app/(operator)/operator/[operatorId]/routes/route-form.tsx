@@ -4,7 +4,7 @@ import { useActionState, useState } from 'react';
 
 import { saveRoute } from '@/lib/operator/setup';
 import { FormMessage, SubmitButton, fieldError } from '@/components/form';
-import { Button, Field, Input, Select } from '@/components/ui';
+import { Field, Input, Select } from '@/components/ui';
 import { idleState } from '@/lib/forms';
 
 type StopOption = { id: string; label: string };
