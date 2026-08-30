@@ -8,6 +8,7 @@ import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
+  inviteRevokeSchema,
   memberInviteSchema,
   memberRemoveSchema,
   operatorApplicationSchema,
@@ -72,44 +73,82 @@ export async function saveOperatorProfile(
 }
 
 /**
- * Adds someone who already has a Corridor account to the team.
+ * Puts someone on the team, whether or not they have an account yet.
+ *
+ * If they are already registered they are added outright. If they are not,
+ * the address is recorded as an invite and a database trigger attaches the
+ * membership the moment they sign up — so the owner never has to come back and
+ * finish the job, which is what this screen used to demand of them.
  *
  * Looking a user up by email needs the service-role client — a policy cannot
  * expose the whole profile table to anyone who wants to probe for addresses.
- * The membership itself is then written as the caller, so RLS still applies to
- * the part that matters.
+ * Both writes are then made as the caller, so RLS still governs the part that
+ * matters.
  */
 export async function addTeamMember(_prev: FormState, formData: FormData): Promise<FormState> {
   const parsed = parseForm(memberInviteSchema, formData);
   if (!parsed.ok) return parsed.state;
 
-  await requireOperatorRole(parsed.data.operator_id, ['owner']);
-
-  const match = await findUserByEmail(parsed.data.email);
-
-  if (!match) {
-    return fail(
-      `Nobody signs in with ${parsed.data.email} yet. Ask them to create an account first, then add them.`,
-    );
-  }
+  const { viewer } = await requireOperatorRole(parsed.data.operator_id, ['owner']);
 
   const supabase = await createClient();
-  const { error } = await supabase.from('operator_members').insert({
+  const match = await findUserByEmail(parsed.data.email);
+
+  if (match) {
+    const { error } = await supabase.from('operator_members').insert({
+      operator_id: parsed.data.operator_id,
+      user_id: match.id,
+      role: parsed.data.role,
+    });
+
+    if (error) {
+      return fail(
+        error.code === '23505'
+          ? 'They are already on your team.'
+          : 'We could not add them. Try again in a moment.',
+      );
+    }
+
+    revalidatePath(`/operator/${parsed.data.operator_id}/team`);
+    return succeed(`${parsed.data.email} can now sign in to this business.`);
+  }
+
+  const { error } = await supabase.from('operator_invites').insert({
     operator_id: parsed.data.operator_id,
-    user_id: match.id,
+    email: parsed.data.email,
     role: parsed.data.role,
+    invited_by: viewer.userId,
   });
 
   if (error) {
     return fail(
       error.code === '23505'
-        ? 'They are already on your team.'
-        : 'We could not add them. Try again in a moment.',
+        ? 'You have already invited that address.'
+        : 'We could not save that invitation. Try again in a moment.',
     );
   }
 
   revalidatePath(`/operator/${parsed.data.operator_id}/team`);
-  return succeed(`${parsed.data.email} can now sign in to this business.`);
+  return succeed(
+    `Invited ${parsed.data.email}. They join the team as soon as they create an account with that address.`,
+  );
+}
+
+/** Withdraws an invitation that has not been taken up. */
+export async function revokeInvite(formData: FormData): Promise<void> {
+  const parsed = parseForm(inviteRevokeSchema, formData);
+  if (!parsed.ok) return;
+
+  await requireOperatorRole(parsed.data.operator_id, ['owner']);
+
+  const supabase = await createClient();
+  await supabase
+    .from('operator_invites')
+    .delete()
+    .eq('id', parsed.data.invite_id)
+    .is('accepted_at', null);
+
+  revalidatePath(`/operator/${parsed.data.operator_id}/team`);
 }
 
 /**

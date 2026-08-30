@@ -1,8 +1,18 @@
 import { TeamForm } from './team-form';
-import { removeTeamMember } from '@/lib/operator/actions';
+import { CopyLink } from './copy-link';
+import { removeTeamMember, revokeInvite } from '@/lib/operator/actions';
 import { requireOperatorRole } from '@/lib/auth/session';
 import { Badge, Button, Card, CardHeader, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { siteUrl } from '@/lib/supabase/env';
+import { formatRelative } from '@/lib/time';
+
+type Invite = {
+  id: string;
+  email: string;
+  role: 'owner' | 'staff' | 'driver';
+  created_at: string;
+};
 
 type Member = {
   id: string;
@@ -32,7 +42,15 @@ export default async function TeamPage({
     .select('id, role, user_id, profile:profiles(full_name, phone)')
     .eq('operator_id', operatorId);
 
+  const { data: inviteRows } = await supabase
+    .from('operator_invites')
+    .select('id, email, role, created_at')
+    .eq('operator_id', operatorId)
+    .is('accepted_at', null)
+    .order('created_at', { ascending: false });
+
   const members = (data ?? []) as unknown as Member[];
+  const invites = (inviteRows ?? []) as Invite[];
   const ownerCount = members.filter((m) => m.role === 'owner').length;
 
   return (
@@ -47,8 +65,8 @@ export default async function TeamPage({
           <Card className="h-fit p-5">
             <h2 className="font-semibold text-ink-900">Add someone</h2>
             <p className="mt-1 mb-4 text-sm text-ink-600">
-              They need a Corridor account first. Ask them to sign up, then add the email address
-              they used.
+              Add the email address they will sign in with. If they already have an account they
+              join straight away; if not, they join the moment they create one.
             </p>
             <TeamForm operatorId={operatorId} />
           </Card>
@@ -108,6 +126,43 @@ export default async function TeamPage({
           </Table>
         </Card>
       </div>
+
+      {isOwner && invites.length > 0 ? (
+        <div className="mt-6">
+          <Card>
+            <CardHeader
+              title="Invited, not signed up yet"
+              description="They join the team automatically when they create an account with this address. Send them the link — by text or WhatsApp is fine."
+            />
+
+            <ul className="divide-y divide-ink-200">
+              {invites.map((invite) => (
+                <li key={invite.id} className="space-y-2 px-5 py-4">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="font-medium text-ink-900">{invite.email}</span>
+                    <Badge tone={invite.role === 'driver' ? 'neutral' : 'brand'}>
+                      {invite.role}
+                    </Badge>
+                    <span className="text-xs text-ink-500">
+                      invited {formatRelative(invite.created_at)}
+                    </span>
+
+                    <form action={revokeInvite} className="ml-auto">
+                      <input type="hidden" name="operator_id" value={operatorId} />
+                      <input type="hidden" name="invite_id" value={invite.id} />
+                      <Button type="submit" size="sm" tone="danger">
+                        Revoke
+                      </Button>
+                    </form>
+                  </div>
+
+                  <CopyLink url={`${siteUrl()}/sign-up`} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      ) : null}
     </>
   );
 }
