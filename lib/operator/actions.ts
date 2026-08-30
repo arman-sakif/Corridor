@@ -85,11 +85,7 @@ export async function addTeamMember(_prev: FormState, formData: FormData): Promi
 
   await requireOperatorRole(parsed.data.operator_id, ['owner']);
 
-  const admin = createAdminClient();
-  const { data: found } = await admin.auth.admin.listUsers();
-  const match = found?.users.find(
-    (user) => user.email?.toLowerCase() === parsed.data.email,
-  );
+  const match = await findUserByEmail(parsed.data.email);
 
   if (!match) {
     return fail(
@@ -114,6 +110,40 @@ export async function addTeamMember(_prev: FormState, formData: FormData): Promi
 
   revalidatePath(`/operator/${parsed.data.operator_id}/team`);
   return succeed(`${parsed.data.email} can now sign in to this business.`);
+}
+
+/**
+ * Finds an auth user by email address, across the whole user table.
+ *
+ * `listUsers()` is paginated and defaults to the first 50. Called bare, it
+ * stops seeing people the moment the platform has more accounts than that —
+ * and the failure is silent and actively misleading: the owner is told
+ * "nobody signs in with that email yet" about a colleague who plainly does,
+ * and the only apparent fix is to sign up again with an address that is
+ * already taken.
+ *
+ * GoTrue offers no lookup-by-email, and `auth.users` is not exposed to
+ * PostgREST, so paging is the way. The cap is there so a bad response cannot
+ * spin this forever; a real team member is found on page one either way.
+ */
+async function findUserByEmail(email: string): Promise<{ id: string } | null> {
+  const admin = createAdminClient();
+  const perPage = 1000;
+  const maxPages = 50;
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error || !data) return null;
+
+    const match = data.users.find((user) => user.email?.toLowerCase() === email);
+    if (match) return match;
+
+    // A short page is the last page.
+    if (data.users.length < perPage) return null;
+  }
+
+  console.error('findUserByEmail gave up paging', { pages: maxPages, perPage });
+  return null;
 }
 
 export async function removeTeamMember(formData: FormData): Promise<void> {
