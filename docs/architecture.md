@@ -402,8 +402,10 @@ matching algorithm, driver-posted rides, and multi-operator connecting trips
   entry so departures appear immediately. `generate_departures()` is
   idempotent, so a missed run costs nothing. If free-tier scheduling proves
   awkward, the fallback is to generate lazily on the first search for a date.
-- **Subscription billing.** Recorded in-app, collected off-platform by
-  e-transfer at launch. Automate only when operator count justifies it.
+- **Subscription billing.** A per-operator amount and a payment ledger,
+  recorded in-app and collected off-platform by e-transfer. `past_due` warns
+  the operator and never cuts them off — that would strand passengers already
+  holding confirmed seats. Automate only when operator count justifies it.
 - **Licensing and insurance.** Ontario licensing and commercial passenger
   insurance are the operators' responsibility, not the platform's. Worth
   confirming the platform's own exposure as an intermediary before going live.
