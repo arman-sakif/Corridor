@@ -1,22 +1,28 @@
 import Link from 'next/link';
 import type { ComponentProps, ReactNode } from 'react';
 
+import { IconInfo, IconWarning, IconCheck } from '@/components/icons';
+
 /** Presentational primitives. No state, no data fetching, no decisions. */
 
 function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
 }
 
+/* ----------------------------------------------------------------- buttons */
+
 const buttonBase =
-  'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors ' +
+  'inline-flex items-center justify-center gap-2 rounded-xl font-medium ' +
+  'transition-[background-color,box-shadow,transform,color] duration-150 ' +
+  'active:translate-y-px ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ' +
-  'disabled:cursor-not-allowed disabled:opacity-50';
+  'disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0';
 
 const buttonTone = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700',
-  secondary: 'bg-white text-ink-800 ring-1 ring-ink-200 hover:bg-ink-50',
-  danger: 'bg-white text-bad-700 ring-1 ring-bad-100 hover:bg-bad-100',
-  ghost: 'text-ink-600 hover:bg-ink-100 hover:text-ink-900',
+  primary: 'bg-brand-600 text-white shadow-card hover:bg-brand-700 hover:shadow-raised',
+  secondary: 'bg-white text-ink-800 ring-1 ring-ink-200 shadow-card hover:bg-ink-50 hover:ring-ink-300',
+  danger: 'bg-white text-bad-700 ring-1 ring-bad-100 hover:bg-bad-50 hover:ring-bad-600/30',
+  ghost: 'text-ink-600 hover:bg-ink-150 hover:text-ink-900',
 } as const;
 
 const buttonSize = {
@@ -50,11 +56,13 @@ export function ButtonLink({
   return <Link {...props} className={buttonClass(tone, size, className)} />;
 }
 
+/* ------------------------------------------------------------------- cards */
+
 export function Card({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       {...props}
-      className={cx('rounded-xl bg-white shadow-sm ring-1 ring-ink-200', className)}
+      className={cx('rounded-2xl bg-white shadow-card ring-1 ring-ink-200/70', className)}
     />
   );
 }
@@ -69,22 +77,25 @@ export function CardHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-ink-200 px-5 py-4">
-      <div>
-        <h2 className="font-semibold text-ink-900">{title}</h2>
+    <div className="flex items-start justify-between gap-4 border-b border-ink-150 px-5 py-4">
+      <div className="min-w-0">
+        <h2 className="font-semibold tracking-tight text-ink-900">{title}</h2>
         {description ? <p className="mt-1 text-sm text-ink-600">{description}</p> : null}
       </div>
-      {action}
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
 
+/* ------------------------------------------------------------------ badges */
+
 const badgeTone = {
-  neutral: 'bg-ink-100 text-ink-700',
-  brand: 'bg-brand-50 text-brand-700',
-  good: 'bg-good-100 text-good-700',
-  warn: 'bg-warn-100 text-warn-700',
-  bad: 'bg-bad-100 text-bad-700',
+  neutral: 'bg-ink-150 text-ink-700 ring-ink-200',
+  brand: 'bg-brand-50 text-brand-700 ring-brand-100',
+  accent: 'bg-accent-100 text-accent-700 ring-accent-100',
+  good: 'bg-good-50 text-good-700 ring-good-100',
+  warn: 'bg-warn-50 text-warn-700 ring-warn-100',
+  bad: 'bg-bad-50 text-bad-700 ring-bad-100',
 } as const;
 
 export function Badge({
@@ -97,7 +108,7 @@ export function Badge({
   return (
     <span
       className={cx(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap',
         badgeTone[tone],
       )}
     >
@@ -105,6 +116,8 @@ export function Badge({
     </span>
   );
 }
+
+/* ------------------------------------------------------------------- forms */
 
 export function Field({
   label,
@@ -121,34 +134,42 @@ export function Field({
     <label className="block">
       <span className="mb-1.5 block text-sm font-medium text-ink-800">{label}</span>
       {children}
-      {hint && !error ? <span className="mt-1 block text-xs text-ink-500">{hint}</span> : null}
-      {error ? <span className="mt-1 block text-xs text-bad-700">{error}</span> : null}
+      {hint && !error ? <span className="mt-1.5 block text-xs text-ink-500">{hint}</span> : null}
+      {error ? (
+        <span className="mt-1.5 flex items-start gap-1 text-xs font-medium text-bad-700">
+          <IconWarning className="mt-px shrink-0 text-sm" />
+          {error}
+        </span>
+      ) : null}
     </label>
   );
 }
 
 const controlClass =
-  'w-full rounded-lg bg-white px-3 py-2 text-sm text-ink-900 ring-1 ring-ink-300 ' +
-  'placeholder:text-ink-400 focus:outline-2 focus:outline-offset-0 focus:outline-brand-600 ' +
-  'disabled:bg-ink-100 disabled:text-ink-500';
+  'w-full rounded-xl bg-white px-3.5 text-sm text-ink-900 ring-1 ring-ink-300 ' +
+  'transition-shadow placeholder:text-ink-400 ' +
+  'focus:ring-2 focus:ring-brand-500 focus:outline-none ' +
+  'disabled:bg-ink-150 disabled:text-ink-500';
 
 export function Input({ className, ...props }: ComponentProps<'input'>) {
-  return <input {...props} className={cx(controlClass, 'h-10', className)} />;
+  return <input {...props} className={cx(controlClass, 'h-11', className)} />;
 }
 
 export function Select({ className, ...props }: ComponentProps<'select'>) {
-  return <select {...props} className={cx(controlClass, 'h-10', className)} />;
+  return <select {...props} className={cx(controlClass, 'h-11 pr-9', className)} />;
 }
 
 export function Textarea({ className, ...props }: ComponentProps<'textarea'>) {
-  return <textarea {...props} className={cx(controlClass, className)} />;
+  return <textarea {...props} className={cx(controlClass, 'py-2.5', className)} />;
 }
 
+/* ------------------------------------------------------------------ alerts */
+
 const alertTone = {
-  info: 'bg-brand-50 text-brand-700 ring-brand-100',
-  good: 'bg-good-100 text-good-700 ring-good-100',
-  warn: 'bg-warn-100 text-warn-700 ring-warn-100',
-  bad: 'bg-bad-100 text-bad-700 ring-bad-100',
+  info: { box: 'bg-brand-50 text-brand-800 ring-brand-100', Icon: IconInfo },
+  good: { box: 'bg-good-50 text-good-700 ring-good-100', Icon: IconCheck },
+  warn: { box: 'bg-warn-50 text-warn-700 ring-warn-100', Icon: IconWarning },
+  bad: { box: 'bg-bad-50 text-bad-700 ring-bad-100', Icon: IconWarning },
 } as const;
 
 export function Alert({
@@ -158,9 +179,11 @@ export function Alert({
   tone?: keyof typeof alertTone;
   children: ReactNode;
 }) {
+  const { box, Icon } = alertTone[tone];
   return (
-    <div className={cx('rounded-lg px-4 py-3 text-sm ring-1', alertTone[tone])} role="status">
-      {children}
+    <div className={cx('flex gap-2.5 rounded-xl px-4 py-3 text-sm ring-1', box)} role="status">
+      <Icon className="mt-0.5 shrink-0 text-base" />
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
@@ -170,16 +193,25 @@ export function EmptyState({
   title,
   children,
   action,
+  icon,
 }: {
   title: ReactNode;
   children?: ReactNode;
   action?: ReactNode;
+  icon?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-dashed border-ink-300 px-6 py-10 text-center">
-      <p className="font-medium text-ink-800">{title}</p>
-      {children ? <p className="mx-auto mt-1 max-w-md text-sm text-ink-600">{children}</p> : null}
-      {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
+    <div className="rounded-2xl border border-dashed border-ink-300 bg-ink-50/60 px-6 py-12 text-center">
+      {icon ? (
+        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-white text-lg text-ink-400 ring-1 ring-ink-200">
+          {icon}
+        </div>
+      ) : null}
+      <p className="font-medium text-ink-900">{title}</p>
+      {children ? (
+        <p className="mx-auto mt-1.5 max-w-md text-sm text-ink-600">{children}</p>
+      ) : null}
+      {action ? <div className="mt-5 flex justify-center">{action}</div> : null}
     </div>
   );
 }
@@ -195,11 +227,11 @@ export function PageHeader({
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink-900">{title}</h1>
-        {description ? <p className="mt-1 text-sm text-ink-600">{description}</p> : null}
+      <div className="min-w-0">
+        <h1 className="display text-2xl font-semibold text-ink-900">{title}</h1>
+        {description ? <p className="mt-1.5 text-sm text-ink-600">{description}</p> : null}
       </div>
-      {action}
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
@@ -219,7 +251,7 @@ export function Th({ className, ...props }: ComponentProps<'th'>) {
     <th
       {...props}
       className={cx(
-        'border-b border-ink-200 px-3 py-2 text-left text-xs font-semibold tracking-wide text-ink-600 uppercase',
+        'border-b border-ink-200 bg-ink-50/80 px-3 py-2.5 text-left text-xs font-semibold tracking-wider text-ink-500 uppercase',
         className,
       )}
     />
@@ -227,5 +259,12 @@ export function Th({ className, ...props }: ComponentProps<'th'>) {
 }
 
 export function Td({ className, ...props }: ComponentProps<'td'>) {
-  return <td {...props} className={cx('border-b border-ink-100 px-3 py-2 align-top', className)} />;
+  return (
+    <td {...props} className={cx('border-b border-ink-150 px-3 py-3 align-top', className)} />
+  );
+}
+
+/** A row that highlights on hover — worth it on a table an operator scans daily. */
+export function Tr({ className, ...props }: ComponentProps<'tr'>) {
+  return <tr {...props} className={cx('transition-colors hover:bg-ink-50/70', className)} />;
 }

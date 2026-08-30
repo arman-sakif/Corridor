@@ -3,6 +3,9 @@ import Link from 'next/link';
 import { signOut } from '@/lib/auth/actions';
 import { getViewer } from '@/lib/auth/session';
 import { ButtonLink } from '@/components/ui';
+import { NavLink } from '@/components/nav';
+import { IconLogo } from '@/components/icons';
+import { dynamicRoute } from '@/lib/routes';
 
 /**
  * One header across every surface. The links a person sees are the surfaces
@@ -16,61 +19,35 @@ export async function SiteHeader() {
   const drives = viewer?.memberships.some((m) => m.role === 'driver') ?? false;
 
   return (
-    <header className="border-b border-ink-200 bg-white">
-      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-        <Link href="/" className="text-lg font-semibold tracking-tight text-ink-900">
+    <header className="sticky top-0 z-40 border-b border-ink-200 bg-white/85 backdrop-blur-md">
+      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+        <Link
+          href="/"
+          className="flex items-center gap-2 rounded-lg px-1 py-1 text-lg font-semibold tracking-tight text-ink-900 transition-colors hover:text-brand-700"
+        >
+          <IconLogo className="text-xl text-brand-600" />
           Corridor
         </Link>
 
-        <nav className="ml-auto flex items-center gap-1 text-sm">
+        <nav className="ml-auto flex items-center gap-0.5">
           {viewer ? (
             <>
-              <Link
-                href="/my-rides"
-                className="rounded-lg px-3 py-2 text-ink-600 hover:bg-ink-100 hover:text-ink-900"
-              >
-                My rides
-              </Link>
+              <NavLink href="/my-rides">My rides</NavLink>
 
               {staffing.map((membership) => (
-                <Link
-                  key={membership.operator_id}
-                  href={`/operator/${membership.operator_id}`}
-                  className="rounded-lg px-3 py-2 text-ink-600 hover:bg-ink-100 hover:text-ink-900"
-                >
+                <NavLink key={membership.operator_id} href={`/operator/${membership.operator_id}`}>
                   {membership.operator?.name ?? 'Operator'}
-                </Link>
+                </NavLink>
               ))}
 
-              {drives ? (
-                <Link
-                  href="/driver"
-                  className="rounded-lg px-3 py-2 text-ink-600 hover:bg-ink-100 hover:text-ink-900"
-                >
-                  Driving
-                </Link>
-              ) : null}
-
-              {viewer.isAdmin ? (
-                <Link
-                  href="/admin"
-                  className="rounded-lg px-3 py-2 text-ink-600 hover:bg-ink-100 hover:text-ink-900"
-                >
-                  Admin
-                </Link>
-              ) : null}
-
-              <Link
-                href="/profile"
-                className="rounded-lg px-3 py-2 text-ink-600 hover:bg-ink-100 hover:text-ink-900"
-              >
-                Profile
-              </Link>
+              {drives ? <NavLink href="/driver">Driving</NavLink> : null}
+              {viewer.isAdmin ? <NavLink href="/admin">Admin</NavLink> : null}
+              <NavLink href="/profile">Profile</NavLink>
 
               <form action={signOut}>
                 <button
                   type="submit"
-                  className="rounded-lg px-3 py-2 text-ink-600 hover:bg-ink-100 hover:text-ink-900"
+                  className="rounded-lg px-3 py-2 text-sm font-medium text-ink-500 transition-colors hover:bg-ink-150 hover:text-ink-900"
                 >
                   Sign out
                 </button>
@@ -78,13 +55,8 @@ export async function SiteHeader() {
             </>
           ) : (
             <>
-              <Link
-                href="/sign-in"
-                className="rounded-lg px-3 py-2 text-ink-600 hover:bg-ink-100 hover:text-ink-900"
-              >
-                Sign in
-              </Link>
-              <ButtonLink href="/sign-up" size="sm">
+              <NavLink href="/sign-in">Sign in</NavLink>
+              <ButtonLink href={dynamicRoute('/sign-up')} size="sm">
                 Create account
               </ButtonLink>
             </>
