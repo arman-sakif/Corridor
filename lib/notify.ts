@@ -114,7 +114,14 @@ async function deliver(recipients: string[], notification: Notification): Promis
   const resend = new Resend(apiKey);
 
   await resend.emails.send({
-    from: process.env.NOTIFY_FROM_EMAIL ?? 'Corridor <noreply@corridor.example>',
+    // Falls back to Resend's sandbox sender, which is the only address that
+    // works before a domain is verified. The previous default was a made-up
+    // domain, so a project with a valid key and no NOTIFY_FROM_EMAIL got a
+    // 403 on every send — the one configuration most likely to be hit first.
+    //
+    // The sandbox sender only delivers to the Resend account owner. Passengers
+    // get nothing until a real domain is verified and set here.
+    from: process.env.NOTIFY_FROM_EMAIL ?? 'Corridor <onboarding@resend.dev>',
     to: recipients,
     subject: notification.subject,
     text: link ? `${notification.body}\n\n${link}` : notification.body,
