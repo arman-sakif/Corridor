@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/server';
 import { formatCents } from '@/lib/money';
 import { formatServiceDateLong, formatTime, torontoInstant } from '@/lib/time';
 import { legLoads, type CapacityBooking } from '@/lib/booking/capacity';
+import { DRIVING_ROLES } from '@/lib/auth/routing';
 import type { BookingStatus, PaymentMethod } from '@/lib/supabase/database.types';
 
 type Passenger = {
@@ -103,7 +104,9 @@ export default async function DepartureDayPage({
   const unassigned = riding.filter((p) => !p.assigned_vehicle_id);
 
   const drivers = (team ?? [])
-    .filter((member) => member.role === 'driver' || member.role === 'owner')
+    // The same list the /driver guard admits — see DRIVING_ROLES. Assigning
+    // someone the guard turns away would hand them a manifest they cannot open.
+    .filter((member) => DRIVING_ROLES.includes(member.role))
     .map((member) => ({
       id: member.user_id,
       name: (member.profile as unknown as { full_name: string | null } | null)?.full_name ?? 'Team member',
