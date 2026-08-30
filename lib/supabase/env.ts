@@ -54,7 +54,10 @@ export function supabaseServiceRoleKey(): string {
  * per-deployment URL on a preview.
  *
  * `NEXT_PUBLIC_SITE_URL` still wins when set, which is what you want for a
- * custom domain.
+ * custom domain. It is deliberately not set in any environment today: a value
+ * copied from an example file and never revisited is how production ends up
+ * emailing reset links that point at the reader's own laptop. The Vercel
+ * fallback needs no maintenance and cannot go stale.
  */
 export function siteUrl(): string {
   if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
