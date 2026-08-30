@@ -247,6 +247,11 @@ describe('what the server itself calls', () => {
     const calledByCron = [
       'public.generate_departures(uuid, integer)',
       'public.expire_stale_holds()',
+      // Not called by the cron, but by seeding and diagnostics. It returns
+      // aggregate counts the service role can already compute from bookings,
+      // and withholding it only makes tooling read an empty result as an
+      // answer.
+      'public.departure_leg_loads(uuid[])',
     ];
 
     for (const signature of calledByCron) {
