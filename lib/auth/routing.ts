@@ -1,4 +1,25 @@
+import type { OperatorMemberRole } from '@/lib/supabase/database.types';
+
 import type { Viewer } from './session';
+
+/**
+ * The roles that can be behind the wheel, and therefore the roles allowed into
+ * `/driver`.
+ *
+ * Owners are on this list because they drive. A small operator is often one
+ * person with a van, and the departure screen offers owners alongside drivers
+ * when assigning one — so a guard that admitted only `driver` would lock an
+ * owner out of the manifest for a trip they are about to make.
+ *
+ * Staff are not: they run the office, and the assignment screen does not offer
+ * them either. Keep this list and that screen in step — they are the same
+ * question asked from two directions, which is why both now read it from here.
+ */
+export const DRIVING_ROLES: OperatorMemberRole[] = ['driver', 'owner'];
+
+export function canDrive(viewer: Viewer): boolean {
+  return viewer.memberships.some((m) => DRIVING_ROLES.includes(m.role));
+}
 
 /**
  * Where a user lands after signing in.
