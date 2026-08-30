@@ -16,7 +16,7 @@ this file is the signpost:
 |---|---|---|
 | `toronto_instant(date, time)` | `20260827000001_initial_schema.sql` | Local wall clock → instant, DST-correct. |
 | `is_platform_admin()`, `is_operator_member()`, `has_operator_role()` | `20260827000002_rls_baseline.sql` | RLS helpers. `SECURITY DEFINER`, pinned `search_path`. |
-| `handle_new_user()` | `20260827000002_rls_baseline.sql` | Auth trigger — every new user gets a profile row. |
+| `handle_new_user()` | `20260827000002_rls_baseline.sql`, replaced in `20260830000015_signup_metadata.sql` | Auth trigger — every new user gets a profile row, carrying the name and phone from signup metadata. |
 | `guard_operator_status()` | `20260827000002_rls_baseline.sql` | Only a platform admin changes operator status. |
 | `attach_operator_owner()` | `20260829000003_operator_setup.sql` | Every operator gets an owner on insert. |
 | `operator_is_active()`, `route_operator()`, `departure_operator()`, `is_operator_manager()` | `20260829000003_operator_setup.sql` | RLS lookups. |
@@ -25,3 +25,4 @@ this file is the signpost:
 | `request_booking()` | `20260829000005_booking.sql` | **The capacity function.** Locks the departure, checks every leg, inserts the hold. |
 | `approve_booking()`, `decline_booking()`, `cancel_booking()` | `20260829000005_booking.sql` | Guarded status transitions. |
 | `expire_stale_holds()` | `20260829000005_booking.sql` | Cosmetic sweep. Capacity does not depend on it running. |
+| `normalise_phone()`, `phone_in_use()` | `20260830000017_phone_uniqueness_check.sql` | Digits-only phone comparison, so a duplicate check does not have to select every profile. Service role only. |

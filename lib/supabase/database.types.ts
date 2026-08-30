@@ -48,6 +48,7 @@ export type IncityBookingStatus = 'held' | 'approved' | 'declined' | 'cancelled'
  */
 type Relationships = {
   profiles: [];
+  auth_recovery_requests: [];
   operators: [
     {
       foreignKeyName: 'operators_created_by_fkey';
@@ -369,6 +370,11 @@ type Timestamps = { created_at: string; updated_at: string };
 export interface Database {
   public: {
     Tables: {
+      auth_recovery_requests: Table<
+        'auth_recovery_requests',
+        { email_hash: string; requested_at: string },
+        'requested_at'
+      >;
       profiles: Table<
         'profiles',
         {
@@ -739,6 +745,10 @@ export interface Database {
           no_shows: number;
           red_flags: number;
         }[];
+      };
+      phone_in_use: {
+        Args: { p_phone: string; p_exclude?: string | null };
+        Returns: boolean;
       };
     };
     Enums: {

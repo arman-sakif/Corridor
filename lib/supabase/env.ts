@@ -65,3 +65,39 @@ export function siteUrl(): string {
 
   return 'http://localhost:3000';
 }
+
+/**
+ * Whether to refuse a phone number that is already on another profile.
+ *
+ * Off by default, and deliberately so while the platform is being built: the
+ * only people making accounts right now are us, and we make several a day
+ * against the same phone and the same inbox. Turning the rule on before that
+ * stops would only mean disabling it again to test anything.
+ *
+ * The check itself lives in `lib/auth/contact-uniqueness.ts` and is written,
+ * wired in, and tested — this switch is the whole difference between advisory
+ * and enforced. Set `ENFORCE_UNIQUE_CONTACT=1` when the demo accounts are gone.
+ */
+export function enforceUniqueContact(): boolean {
+  const value = process.env.ENFORCE_UNIQUE_CONTACT;
+  return value === '1' || value === 'true';
+}
+
+
+/**
+ * How long the session cookie is allowed to live in the browser.
+ *
+ * Supabase rotates the refresh token on every request the proxy makes, so the
+ * session itself never has to end. What ends it is the cookie disappearing —
+ * and a cookie written with no max-age is a session cookie, gone the moment
+ * the browser closes. That is the whole of 'why am I signed out again'.
+ *
+ * 400 days is the ceiling Chrome enforces on any cookie; asking for more just
+ * gets it clamped.
+ */
+export const SESSION_COOKIE_OPTIONS = {
+  maxAge: 400 * 24 * 60 * 60,
+  sameSite: 'lax',
+  secure: process.env.NODE_ENV === 'production',
+  path: '/',
+} as const;

@@ -1,17 +1,21 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { safeRedirectPath } from '@/lib/auth/routing';
+import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
+import { getViewer, profileIsComplete } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 
 /**
  * Where Supabase sends the user back after Google OAuth or an email
  * confirmation link. Exchanges the one-time code for a session, then hands off
  * to wherever they were headed.
+ *
+ * Links we mint ourselves and post through Resend land at /auth/confirm
+ * instead — they carry a token hash rather than a PKCE code.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get('code');
-  const next = safeRedirectPath(searchParams.get('next'), '/');
+  const requested = searchParams.get('next');
 
   if (!code) {
     return NextResponse.redirect(`${origin}/sign-in?error=callback`);
@@ -23,23 +27,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/sign-in?error=callback`);
   }
 
-  // A first-time Google user has a profile row (the auth trigger makes one)
-  // but no phone yet, and an operator needs a phone to approve them. Send
-  // them through the profile once.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const viewer = await getViewer();
 
-  if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('phone')
-      .eq('id', user.id)
-      .maybeSingle();
+  // Without a viewer there is nothing to route by; send them somewhere safe
+  // rather than guessing.
+  if (!viewer) return NextResponse.redirect(`${origin}${safeRedirectPath(requested, '/')}`);
 
-    if (!profile?.phone) {
-      return NextResponse.redirect(`${origin}/profile?next=${encodeURIComponent(next)}`);
-    }
+  // Landing by role, the same way the password path does. An operator or an
+  // admin arriving through Google used to be dropped on the passenger home
+  // page and left to find their own dashboard.
+  const next = safeRedirectPath(requested, landingPathFor(viewer));
+
+  // Google supplies a name and never a phone number, and an operator cannot
+  // approve a passenger they have no way to reach. The password signup form
+  // now asks for both up front, so this detour is only for OAuth.
+  if (!profileIsComplete(viewer.profile)) {
+    return NextResponse.redirect(`${origin}/profile?next=${encodeURIComponent(next)}`);
   }
 
   return NextResponse.redirect(`${origin}${next}`);

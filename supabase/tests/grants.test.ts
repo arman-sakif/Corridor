@@ -120,11 +120,13 @@ describe('function grants', () => {
         order by 1`,
     );
 
-    // In-city is Phase 6: its tables exist, deny everything, and that is
-    // deliberate until the feature is built.
+    // Three deliberate exceptions. In-city is Phase 6: its tables exist, deny
+    // everything, and that is right until the feature is built. The recovery
+    // throttle is reached only by a Server Action holding the secret key —
+    // there is no row on it any signed-in user should ever see.
     assert.deepEqual(
       policyless.map((row) => row.relname),
-      ['incity_bookings', 'incity_zones'],
+      ['auth_recovery_requests', 'incity_bookings', 'incity_zones'],
     );
   });
 });

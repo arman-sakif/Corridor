@@ -23,7 +23,9 @@ export type NotificationKind =
   | 'booking_declined'
   | 'booking_cancelled'
   | 'departure_tomorrow'
-  | 'payment_reminder';
+  | 'payment_reminder'
+  | 'login_code'
+  | 'password_reset';
 
 export type Notification = {
   kind: NotificationKind;
@@ -36,6 +38,15 @@ export type Notification = {
   passengerId?: string;
   /** Send to everyone who can act for this operator (owners and staff). */
   operatorId?: string;
+  /**
+   * Send to an address directly, without looking a user up first.
+   *
+   * This exists for account recovery, where the whole point is that nobody is
+   * signed in and we must not confirm whether the address belongs to an
+   * account. Everywhere else, address a person by id and let this module find
+   * the address — that way a changed email is right everywhere at once.
+   */
+  to?: string[];
 };
 
 export async function notify(notification: Notification): Promise<void> {
@@ -51,6 +62,9 @@ export async function notify(notification: Notification): Promise<void> {
 }
 
 async function resolveRecipients(notification: Notification): Promise<string[]> {
+  // An address the caller already has needs no lookup at all.
+  if (notification.to?.length) return notification.to;
+
   // Reading someone else's email address is exactly what the service-role key
   // is for: no policy should expose auth.users to a passenger or an operator.
   const admin = createAdminClient();

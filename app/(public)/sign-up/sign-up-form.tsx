@@ -1,20 +1,28 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 
 import { signInWithGoogle, signUpWithPassword } from '@/lib/auth/actions';
 import { FormMessage, SubmitButton, fieldError } from '@/components/form';
+import { PasswordField } from '@/components/password-field';
 import { Button, Field, Input } from '@/components/ui';
+import { IconGoogle } from '@/components/icons';
 import { idleState } from '@/lib/forms';
 
 export function SignUpForm({ next }: { next: string }) {
   const [state, action] = useActionState(signUpWithPassword, idleState);
+
+  // Held here only so the strength meter can tell someone their password is
+  // their own name back at them. Nothing else reads them.
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
 
   return (
     <div className="space-y-5">
       <form action={signInWithGoogle}>
         <input type="hidden" name="next" value={next} />
         <Button type="submit" tone="secondary" size="lg" className="w-full">
+          <IconGoogle className="text-lg" />
           Continue with Google
         </Button>
       </form>
@@ -28,17 +36,40 @@ export function SignUpForm({ next }: { next: string }) {
       <form action={action} className="space-y-4">
         <input type="hidden" name="next" value={next} />
 
+        <Field label="Full name" error={fieldError(state, 'full_name')}>
+          <Input
+            name="full_name"
+            autoComplete="name"
+            required
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+          />
+        </Field>
+
         <Field label="Email" error={fieldError(state, 'email')}>
-          <Input name="email" type="email" autoComplete="email" required />
+          <Input
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
         </Field>
 
         <Field
-          label="Password"
-          hint="At least 8 characters."
-          error={fieldError(state, 'password')}
+          label="Phone number"
+          hint="Operators call or text this to confirm your seat."
+          error={fieldError(state, 'phone')}
         >
-          <Input name="password" type="password" autoComplete="new-password" required />
+          <Input name="phone" type="tel" autoComplete="tel" required />
         </Field>
+
+        <PasswordField
+          personal={[fullName, email]}
+          error={fieldError(state, 'password')}
+          autoComplete="new-password"
+        />
 
         <FormMessage state={state} />
 

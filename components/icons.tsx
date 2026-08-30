@@ -167,3 +167,45 @@ export const IconLogo = (p: IconProps) => (
     <path d="M8 18.5h4.5A6 6 0 0 0 16 7.5" opacity="0.55" />
   </Icon>
 );
+
+export const IconEye = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </Icon>
+);
+
+export const IconEyeOff = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M9.9 5.8A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3 3.9" />
+    <path d="M6.4 7.5A17 17 0 0 0 2.5 12S6 18.5 12 18.5a9.4 9.4 0 0 0 3.6-.7" />
+    <path d="M10 10a2.8 2.8 0 0 0 4 4" />
+    <path d="M3.5 3.5l17 17" />
+  </Icon>
+);
+
+/**
+ * The Google mark, which is the one icon here that is not a line glyph: the
+ * brand guidelines require the four fixed colours, so it opts out of the
+ * shared `Icon` wrapper and its `currentColor` stroke entirely.
+ */
+export const IconGoogle = (p: IconProps) => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" width="1em" height="1em" {...p}>
+    <path
+      fill="#4285F4"
+      d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8Z"
+    />
+    <path
+      fill="#34A853"
+      d="M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24Z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M5.4 14.4a7.2 7.2 0 0 1 0-4.6V6.7H1.4a12 12 0 0 0 0 10.8l4-3.1Z"
+    />
+    <path
+      fill="#EA4335"
+      d="M12 4.8c1.8 0 3.4.6 4.6 1.8l3.5-3.5C17.9 1.2 15.2 0 12 0A12 12 0 0 0 1.4 6.7l4 3.1C6.3 6.9 8.9 4.8 12 4.8Z"
+    />
+  </svg>
+);

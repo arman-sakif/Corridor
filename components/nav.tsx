@@ -60,7 +60,7 @@ export function NavLink({
       href={href as Route}
       aria-current={active ? 'page' : undefined}
       className={
-        'rounded-lg px-3 py-2 text-sm font-medium transition-colors ' +
+        'shrink-0 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors ' +
         (active ? 'bg-brand-50 text-brand-700' : 'text-ink-600 hover:bg-ink-150 hover:text-ink-900')
       }
     >
