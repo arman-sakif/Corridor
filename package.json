@@ -7,12 +7,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "oxlint .",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"lib/**/*.test.ts\" \"supabase/tests/*.test.ts\"",
     "db:types": "supabase gen types typescript --local > lib/supabase/database.types.ts",
     "test:unit": "node --test \"lib/**/*.test.ts\"",
-    "test:db": "node --test \"supabase/tests/*.test.ts\""
+    "test:db": "node --test \"supabase/tests/*.test.ts\"",
+    "lint:fix": "oxlint . --fix"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
@@ -30,6 +31,7 @@
     "@types/node": "^26.4.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
+    "oxlint": "^1.80.0",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2"

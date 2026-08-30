@@ -96,7 +96,10 @@ export async function migratedDatabase(): Promise<TestDb> {
     try {
       await db.exec(sql);
     } catch (error) {
-      throw new Error(`Migration ${file} failed: ${(error as Error).message}`);
+      // `cause` keeps the original Postgres error — its position, its hint,
+      // its stack. Without it, a failing migration reports only a one-line
+      // message and the useful half is gone.
+      throw new Error(`Migration ${file} failed: ${(error as Error).message}`, { cause: error });
     }
   }
 

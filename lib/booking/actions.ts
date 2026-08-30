@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
 import { requireViewer } from '@/lib/auth/session';
-import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
+import { fail, parseForm, type FormState } from '@/lib/forms';
 import { createClient } from '@/lib/supabase/server';
 import { notify } from '@/lib/notify';
 import { bookingIdSchema, requestSeatSchema } from '@/lib/validation/booking';

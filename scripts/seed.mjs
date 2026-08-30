@@ -181,7 +181,6 @@ async function seedAll() {
   console.log(`${passengerIds.length} passengers.`);
 
   const departureRows = [];
-  const bookingRows = [];
   const ratingRows = [];
   const redFlagRows = [];
   let routeCount = 0;

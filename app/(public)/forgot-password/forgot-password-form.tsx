@@ -1,14 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useEffect, useRef, useState } from 'react';
+import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 
 import { requestRecovery, verifyLoginCode } from '@/lib/auth/recovery';
 import { FormMessage, SubmitButton, fieldError } from '@/components/form';
 import { Button, Field, Input } from '@/components/ui';
 import { dynamicRoute } from '@/lib/routes';
-import { idleState } from '@/lib/forms';
+import { idleState, type FormState } from '@/lib/forms';
 
 type Method = 'code' | 'link';
 
@@ -20,17 +20,20 @@ export function ForgotPasswordForm({ next }: { next: string }) {
   // Which button was pressed. The action returns the same sentence either way
   // — on purpose — so the form has to remember what it asked for.
   const [method, setMethod] = useState<Method>('code');
-  const [enteringCode, setEnteringCode] = useState(false);
 
-  // Only ever act on a genuinely new result. Reacting to `method` alone would
-  // jump to the code step the instant someone *clicked* the code button after
-  // an earlier successful send, before the new request had gone anywhere.
-  const seen = useRef(requestState);
-  useEffect(() => {
-    if (requestState === seen.current) return;
-    seen.current = requestState;
-    if (requestState.status === 'success' && method === 'code') setEnteringCode(true);
-  }, [requestState, method]);
+  // Which result the reader has already dismissed, held by identity rather
+  // than as a boolean. Every send returns a fresh state object, so a new one
+  // is never equal to the dismissed one and the code step reappears by
+  // itself — no effect, and nothing to reset.
+  const [dismissed, setDismissed] = useState<FormState | null>(null);
+
+  // Derived during render rather than synchronised in an effect. Setting state
+  // from an effect here would render twice and, worse, would have to reason
+  // about ordering: `method` changes on *click*, before the new request has
+  // gone anywhere, so an effect watching it would jump to the code step using
+  // the previous request's result.
+  const enteringCode =
+    requestState.status === 'success' && method === 'code' && dismissed !== requestState;
 
   if (enteringCode) {
     return (
@@ -49,6 +52,16 @@ export function ForgotPasswordForm({ next }: { next: string }) {
           a maxLength of 6 would have silently truncated every real code.
         */}
         <Field label="Sign-in code" error={fieldError(codeState, 'code')}>
+          {/*
+            autoFocus is deliberate. This step exists only to receive the code:
+            the field is the sole control on screen, the reader arrived here by
+            asking for it, and a screen reader announces the label on focus, so
+            the usual objection to stealing focus does not apply.
+
+            jsx-a11y/no-autofocus is switched off in .oxlintrc.json rather than
+            suppressed here — oxlint honours neither an inline nor a
+            file-scoped disable for it. See docs/linting.md.
+          */}
           <Input
             name="code"
             inputMode="numeric"
@@ -70,7 +83,7 @@ export function ForgotPasswordForm({ next }: { next: string }) {
         <p className="text-center text-sm text-ink-600">
           <button
             type="button"
-            onClick={() => setEnteringCode(false)}
+            onClick={() => setDismissed(requestState)}
             className="font-medium text-brand-600 hover:text-brand-700"
           >
             Use a different address, or send another code

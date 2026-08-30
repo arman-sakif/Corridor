@@ -4,7 +4,6 @@ import { notFound } from 'next/navigation';
 
 import { Badge, Card, EmptyState } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
-import { formatDaysOfWeek, formatTime } from '@/lib/time';
 
 export const metadata: Metadata = { title: 'Operator' };
 

@@ -115,7 +115,10 @@ describe('luggage and airport surcharges', () => {
   });
 
   it('quotes exactly what it will charge', async () => {
-    const [quote] = await test.asAnon<{
+    // Named for the row, not the function: `quote` here is the imported
+    // TypeScript quoter, and shadowing it inside a file that compares the two
+    // is asking to compare a thing with itself.
+    const [quoted] = await test.asAnon<{
       base_cents: number;
       luggage_cents: number;
       airport_cents: number;
@@ -148,7 +151,7 @@ describe('luggage and airport surcharges', () => {
     );
 
     // A quote that disagrees with the charge is worse than no quote.
-    assert.deepEqual(quote, charged);
+    assert.deepEqual(quoted, charged);
   });
 
   it('quotes nothing for a pair of stops that is not for sale', async () => {
