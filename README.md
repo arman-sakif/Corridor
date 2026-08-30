@@ -37,10 +37,22 @@ publish a timetable, take real bookings, run the day, and settle payment.
 | 6 | In-city add-on | tables and seed data only |
 | 7 | Subscription tracking, then mobile | tables only |
 
-Not yet wired: Google OAuth (needs credentials), Resend (without a key
-`notify()` logs instead of sending — including the sign-in codes and reset
-links, which is how you read them in development), and a notifications table
-for the in-app list.
+Not yet wired: Google OAuth (needs credentials) and a notifications table for
+the in-app list.
+
+**Email is on Resend's sandbox sender**, which delivers only to the address the
+Resend account was opened with. That is a deliberate prototype constraint —
+sending to anyone else needs a verified domain, and a domain costs money. So
+account recovery reaches the developer's inbox and nobody else's.
+
+It is not a silent failure. `notify()` logs the whole message — subject, body,
+and any link — whenever a send is refused or no key is set, so a sign-in code
+is always readable from the server console whatever the recipient. Watch
+`npm run dev` while using `/forgot-password` and the code is right there.
+
+To send to real passengers: verify a domain at
+[resend.com/domains](https://resend.com/domains), then point
+`NOTIFY_FROM_EMAIL` at it. Nothing in the code changes.
 
 Signing in is email and password or Google. Phone number as a *login* is not
 built: Supabase phone auth needs a paid SMS provider, and there is none yet.
