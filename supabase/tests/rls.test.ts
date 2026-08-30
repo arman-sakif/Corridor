@@ -319,15 +319,38 @@ describe('what an operator learns about a passenger', () => {
     assert.equal(rows[0]!.red_flags, 0);
   });
 
-  it('tells a stranger’s history to nobody', async () => {
+  it('tells a stranger’s history to nobody — not even the red flag count', async () => {
+    // The red flag count used to be a scalar subquery, evaluated outside the
+    // guard, so it came back accurate to any caller while the other three
+    // counts correctly read zero. Zero rows is the only safe answer: a row of
+    // zeroes is itself a claim about the passenger.
+    await test.raw(
+      `insert into public.red_flags (booking_id, operator_id, passenger_id, reason)
+       select b.id, d.operator_id, b.passenger_id, 'no_show'
+         from public.bookings b
+         join public.departures d on d.id = b.departure_id
+        where b.passenger_id = $1 limit 1`,
+      [rider],
+    );
+
     const outsider = await createUser(test, { email: 'nosy@example.com', name: 'Nosy Parker' });
-    const rows = await test.asUser<{ completed: number | null }>(
+    const rows = await test.asUser(
       outsider,
       `select * from public.passenger_history($1)`,
       [rider],
     );
 
-    // The aggregate is over no rows, so nothing is disclosed either way.
-    assert.ok(rows.length === 0 || rows[0]!.completed === 0);
+    assert.equal(rows.length, 0, 'someone with no claim on this passenger learns nothing');
+  });
+
+  it('still answers the operator the passenger actually approached', async () => {
+    const rows = await test.asUser<{ red_flags: number }>(
+      corridor.ownerId,
+      `select * from public.passenger_history($1)`,
+      [rider],
+    );
+
+    assert.equal(rows.length, 1);
+    assert.ok(rows[0]!.red_flags >= 1, 'including the flag raised a moment ago');
   });
 });
