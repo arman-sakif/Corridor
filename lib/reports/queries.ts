@@ -52,11 +52,21 @@ type Raw = {
   } | null;
 };
 
+/**
+ * The reporter is named by its constraint, not by its table.
+ *
+ * `reports` has two foreign keys into `profiles` — `reporter_id` and
+ * `resolved_by` — so a bare `profiles(...)` embed is ambiguous and PostgREST
+ * refuses the whole query: "more than one relationship was found". That comes
+ * back as an error rather than rows, and a caller doing `data ?? []` turns it
+ * into an empty list that reads exactly like "no complaints". It did, until
+ * somebody opened the page.
+ */
 const SELECT = `
   id, category, note, status, resolution, resolved_at, created_at,
   booking_id, operator_id,
   operator:operators(name),
-  reporter:profiles(full_name, phone),
+  reporter:profiles!reports_reporter_id_fkey(full_name, phone),
   booking:bookings(departure:departures(id, service_date, departure_time))
 `;
 

@@ -98,6 +98,7 @@ async function removeAll() {
     await step('zones', db.from('incity_zones').delete().in('operator_id', operatorIds));
     await step('stops', db.from('stops').delete().in('operator_id', operatorIds));
     await step('vehicles', db.from('vehicles').delete().in('operator_id', operatorIds));
+    await step('complaints', db.from('reports').delete().in('operator_id', operatorIds));
     await step('team', db.from('operator_members').delete().in('operator_id', operatorIds));
     await step(
       'subscription payments',
@@ -758,6 +759,25 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
     });
   }
 
+  // Complaints, so /admin/complaints and the operator's own list are not empty
+  // in a demo. One is left open and one closed, because the two render
+  // differently and both are worth being able to look at.
+  const { data: complainable } = await db
+    .from('bookings')
+    .select('id, passenger_id, departure:departures(operator_id)')
+    .eq('status', 'settled')
+    .limit(6);
+
+  const reportRows = (complainable ?? [])
+    .filter((booking) => booking.departure?.operator_id)
+    .slice(0, COMPLAINTS.length)
+    .map((booking, index) => ({
+      booking_id: booking.id,
+      operator_id: booking.departure.operator_id,
+      reporter_id: booking.passenger_id,
+      ...COMPLAINTS[index],
+    }));
+
   if (ratingRows.length) {
     const { error } = await db.from('ratings').insert(ratingRows);
     if (error) die('Could not create ratings', error);
@@ -766,7 +786,13 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
     const { error } = await db.from('red_flags').insert(redFlagRows);
     if (error) die('Could not create red flags', error);
   }
-  console.log(`${ratingRows.length} ratings, ${redFlagRows.length} red flags.`);
+  if (reportRows.length) {
+    const { error } = await db.from('reports').insert(reportRows);
+    if (error) die('Could not create complaints', error);
+  }
+  console.log(
+    `${ratingRows.length} ratings, ${redFlagRows.length} red flags, ${reportRows.length} complaints.`,
+  );
 }
 
 const NOTES = [
@@ -775,6 +801,36 @@ const NOTES = [
   'Travelling with a large suitcase',
   'Will be waiting by the main doors',
   'Might be five minutes late, please call',
+];
+
+/**
+ * Sample complaints. Written like real ones — specific, a bit rambling, and
+ * about the trip rather than about a named driver, because a passenger never
+ * learns who was driving.
+ */
+const COMPLAINTS = [
+  {
+    category: 'lateness',
+    note: 'The van was over an hour late leaving and nobody picked up when I rang the number on the booking. I missed the connection I had booked at the other end.',
+    status: 'open',
+  },
+  {
+    category: 'driving',
+    note: 'Whoever was driving spent most of the 401 on the phone in one hand. Two other passengers said something as well. I would rather not book this departure again.',
+    status: 'open',
+  },
+  {
+    category: 'overcharged',
+    note: 'I was quoted $45 on the booking page and asked for $60 at the kerb, apparently for a bag. I paid it because I did not want an argument in the car park.',
+    status: 'open',
+  },
+  {
+    category: 'vehicle',
+    note: 'No heating for the whole trip in February and one seatbelt did not latch.',
+    status: 'resolved',
+    resolution: 'Van was off the road the same week; the belt was replaced and the heater fixed.',
+    resolved_at: new Date().toISOString(),
+  },
 ];
 
 const REVIEWS = [
