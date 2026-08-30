@@ -2,9 +2,10 @@ import Link from 'next/link';
 
 import { signOut } from '@/lib/auth/actions';
 import { getViewer } from '@/lib/auth/session';
+import { unreadCount } from '@/lib/notifications/queries';
 import { ButtonLink } from '@/components/ui';
 import { NavLink } from '@/components/nav';
-import { IconLogo } from '@/components/icons';
+import { IconBell, IconLogo } from '@/components/icons';
 import { dynamicRoute } from '@/lib/routes';
 
 /**
@@ -17,6 +18,7 @@ export async function SiteHeader() {
 
   const staffing = viewer?.memberships.filter((m) => m.role === 'owner' || m.role === 'staff') ?? [];
   const drives = viewer?.memberships.some((m) => m.role === 'driver') ?? false;
+  const unread = viewer ? await unreadCount(viewer.userId) : 0;
 
   return (
     <header className="sticky top-0 z-40 border-b border-ink-200 bg-white/85 backdrop-blur-md">
@@ -48,6 +50,27 @@ export async function SiteHeader() {
 
               {drives ? <NavLink href="/driver">Driving</NavLink> : null}
               {viewer.isAdmin ? <NavLink href="/admin">Admin</NavLink> : null}
+
+              {/*
+                The count is the point. Email reaches one address until a
+                sending domain exists, so for most people this badge is the
+                only sign that anything happened at all.
+              */}
+              <Link
+                href="/notifications"
+                aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+                className="relative shrink-0 rounded-lg px-3 py-2 text-ink-600 transition-colors hover:bg-ink-150 hover:text-ink-900"
+              >
+                <IconBell className="text-lg" />
+                {unread > 0 ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-1 right-1.5 min-w-4 rounded-full bg-brand-600 px-1 text-center text-[10px] leading-4 font-semibold text-white"
+                  >
+                    {unread > 9 ? '9+' : unread}
+                  </span>
+                ) : null}
+              </Link>
               <NavLink href="/profile">Profile</NavLink>
 
               <form action={signOut} className="shrink-0">

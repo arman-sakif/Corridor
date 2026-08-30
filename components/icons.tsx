@@ -209,3 +209,10 @@ export const IconGoogle = (p: IconProps) => (
     />
   </svg>
 );
+
+export const IconBell = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M18 9a6 6 0 0 0-12 0c0 4-1.5 5.5-1.5 5.5h15S18 13 18 9Z" />
+    <path d="M10.5 18a1.8 1.8 0 0 0 3 0" />
+  </Icon>
+);
