@@ -10,6 +10,19 @@ import { Alert, Card } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Sign in' };
 
+/**
+ * A redirect back here can only carry a code in the URL, so the sentence that
+ * explains it lives on this side. Each one says what to do next: "try again"
+ * on its own leaves someone pressing the same button that just failed.
+ */
+const ERRORS: Record<string, string> = {
+  google: 'Google sign-in did not complete. Try again, or use your email and password below.',
+  callback: 'That sign-in link did not work. Ask for a new one and try again.',
+  expired:
+    'That link has expired or has already been used. Ask for a new one from the forgotten-password screen.',
+  default: 'That sign-in did not complete. Try again.',
+};
+
 export default async function SignInPage({
   searchParams,
 }: {
@@ -30,7 +43,7 @@ export default async function SignInPage({
 
       {params.error ? (
         <div className="mt-4">
-          <Alert tone="bad">That sign-in did not complete. Try again.</Alert>
+          <Alert tone="bad">{ERRORS[params.error] ?? ERRORS.default}</Alert>
         </div>
       ) : null}
 

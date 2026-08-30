@@ -38,8 +38,13 @@ publish a timetable, take real bookings, run the day, and settle payment.
 | 7 | Subscription tracking, then mobile | tables only |
 
 Not yet wired: Google OAuth (needs credentials), Resend (without a key
-`notify()` logs instead of sending), and a notifications table for the in-app
-list.
+`notify()` logs instead of sending — including the sign-in codes and reset
+links, which is how you read them in development), and a notifications table
+for the in-app list.
+
+Signing in is email and password or Google. Phone number as a *login* is not
+built: Supabase phone auth needs a paid SMS provider, and there is none yet.
+Phone is still collected at signup, as the number an operator dials.
 
 ---
 
@@ -72,9 +77,80 @@ npm run dev
    ```
 
 4. **Authentication → URL Configuration**: set the Site URL to your deployed
-   origin and add both `https://<your-app>/auth/callback` and
-   `http://localhost:3000/auth/callback` to the redirect list. Email and
-   password auth is on by default; only Google needs extra credentials.
+   origin and add all four of these to the redirect list:
+
+   ```
+   https://<your-app>/auth/callback     http://localhost:3000/auth/callback
+   https://<your-app>/auth/confirm      http://localhost:3000/auth/confirm
+   ```
+
+   `/auth/callback` takes the PKCE code from Google and from Supabase's own
+   confirmation emails. `/auth/confirm` takes the token hash from the reset
+   links we mint ourselves and send through Resend. Email and password auth is
+   on by default.
+
+5. **Authentication → Sessions**: leave both the inactivity timeout and the
+   time-box unset. Signed in stays signed in — the proxy rotates the refresh
+   token on every request, and the cookie is written with an explicit 400-day
+   max-age (`SESSION_COOKIE_OPTIONS` in `lib/supabase/env.ts`), so the only
+   thing that signs someone out is pressing Sign out.
+
+6. **Authentication → Providers → Email**: turn **Confirm email off**.
+
+   With it on, a new account has to click a link before it can do anything, and
+   that email goes through Supabase's shared SMTP — a couple of messages an hour,
+   then `email rate limit exceeded`. It is the single largest piece of friction
+   between a passenger and their first booking.
+
+   The trade is that an address is not proven at signup. That is the right trade
+   here: nothing is prepaid, an operator approves every booking by hand, and
+   someone who cannot read the inbox cannot recover the account. Revisit it if
+   fake signups ever become a real problem — with Resend configured as custom
+   SMTP, not on Supabase's shared sender.
+
+   `node scripts/auth-loop.mjs` asserts this is off.
+
+### Google sign-in
+
+The code path is complete. What it needs is an OAuth client, and the one detail
+that trips people up is that **Google redirects to Supabase, not to this app** —
+so the redirect URI below is a `supabase.co` address, not a `vercel.app` one.
+
+1. **Google Cloud** → [console.cloud.google.com](https://console.cloud.google.com)
+   → create or pick a project.
+
+2. **OAuth consent screen** (newer consoles: *Google Auth Platform → Branding*):
+   - User type **External**, app name `Corridor`, and a support + developer
+     contact email.
+   - Authorised domains: `supabase.co`, plus `vercel.app` or your custom domain.
+   - Scopes: leave the defaults. `email`, `profile` and `openid` are all this
+     needs, and they are the reason no Google verification review is required.
+   - **Publish the app.** While it says *Testing*, only addresses you list as
+     test users can sign in — everyone else gets `access_blocked`. This is the
+     step people miss, and it looks like a broken button rather than a setting.
+
+3. **Credentials → Create credentials → OAuth client ID**
+   - Application type: **Web application**.
+   - Authorised redirect URI — exactly this, no trailing slash:
+
+     ```
+     https://<ref>.supabase.co/auth/v1/callback
+     ```
+
+     Supabase shows you the same string on the Google provider page. For this
+     project it is `https://applmxxchzbdrtwihqqn.supabase.co/auth/v1/callback`.
+   - Copy the **Client ID** and **Client secret**.
+
+4. **Supabase → Authentication → Providers → Google**: enable it, paste both
+   values, save.
+
+5. Check it: `node scripts/auth-loop.mjs` reports whether the provider is live,
+   then press *Continue with Google* on `/sign-in`.
+
+Until this is done the Google buttons return to the sign-in screen with an
+explanation; email and password work regardless. Nothing in the app changes —
+`signInWithGoogle` and `/auth/callback` are already written and route by role
+on return.
 
 ### Becoming a platform admin
 
@@ -137,6 +213,7 @@ free themselves whether or not the sweep has run.
 | `npm test` | Everything — unit tests and the database tests. |
 | `npm run test:unit` | Fares, capacity, money, time. Fast. |
 | `npm run test:db` | The real migrations against real Postgres. |
+| `node scripts/auth-loop.mjs` | Signup and both recovery paths against the live database. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm run db:types` | Regenerate `lib/supabase/database.types.ts` from a live schema. |
 | `node scripts/seed.mjs` | Rebuild the demo data. |

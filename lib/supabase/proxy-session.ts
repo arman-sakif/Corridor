@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import type { Database } from './database.types';
-import { supabaseAnonKey, supabaseUrl } from './env';
+import { SESSION_COOKIE_OPTIONS, supabaseAnonKey, supabaseUrl } from './env';
 
 /**
  * Refreshes the auth session on every request and writes the rotated cookies
@@ -16,6 +16,9 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(supabaseUrl(), supabaseAnonKey(), {
+    // The refresh happens here on nearly every request, so this is the write
+    // that decides how long a signed-in browser stays signed in.
+    cookieOptions: SESSION_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return request.cookies.getAll();

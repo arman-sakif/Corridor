@@ -1,16 +1,15 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { SignUpForm } from './sign-up-form';
+import { ForgotPasswordForm } from './forgot-password-form';
 import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
 import { getViewer } from '@/lib/auth/session';
 import { dynamicRoute } from '@/lib/routes';
 import { Card } from '@/components/ui';
 
-export const metadata: Metadata = { title: 'Create account' };
+export const metadata: Metadata = { title: 'Forgotten password' };
 
-export default async function SignUpPage({
+export default async function ForgotPasswordPage({
   searchParams,
 }: {
   searchParams: Promise<{ next?: string }>;
@@ -23,25 +22,14 @@ export default async function SignUpPage({
 
   return (
     <div className="mx-auto w-full max-w-md px-4 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight text-ink-900">Create your account</h1>
+      <h1 className="text-2xl font-semibold tracking-tight text-ink-900">Forgotten password</h1>
       <p className="mt-1 text-sm text-ink-600">
-        One screen, then you can book. Operators see your name and number when they confirm your
-        seat — nobody else does.
+        Two ways back in. A code signs you in right now; a link lets you set a new password.
       </p>
 
       <Card className="mt-6 p-6">
-        <SignUpForm next={next} />
+        <ForgotPasswordForm next={next} />
       </Card>
-
-      <p className="mt-6 text-center text-sm text-ink-600">
-        Already have an account?{' '}
-        <Link
-          href={`/sign-in?next=${encodeURIComponent(next)}`}
-          className="font-medium text-brand-600 hover:text-brand-700"
-        >
-          Sign in
-        </Link>
-      </p>
     </div>
   );
 }

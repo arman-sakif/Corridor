@@ -23,13 +23,19 @@ export async function SiteHeader() {
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
         <Link
           href="/"
-          className="flex items-center gap-2 rounded-lg px-1 py-1 text-lg font-semibold tracking-tight text-ink-900 transition-colors hover:text-brand-700"
+          className="flex shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-lg font-semibold tracking-tight text-ink-900 transition-colors hover:text-brand-700"
         >
           <IconLogo className="text-xl text-brand-600" />
           Corridor
         </Link>
 
-        <nav className="ml-auto flex items-center gap-0.5">
+        {/*
+          A passenger who also drives for two operators has five links here,
+          and on a phone that is wider than the screen. Scrolling the nav keeps
+          every one of them reachable — sign out most of all, which sat off the
+          right-hand edge with no way to get to it.
+        */}
+        <nav className="ml-auto flex items-center gap-0.5 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {viewer ? (
             <>
               <NavLink href="/my-rides">My rides</NavLink>
@@ -44,7 +50,7 @@ export async function SiteHeader() {
               {viewer.isAdmin ? <NavLink href="/admin">Admin</NavLink> : null}
               <NavLink href="/profile">Profile</NavLink>
 
-              <form action={signOut}>
+              <form action={signOut} className="shrink-0">
                 <button
                   type="submit"
                   className="rounded-lg px-3 py-2 text-sm font-medium text-ink-500 transition-colors hover:bg-ink-150 hover:text-ink-900"
