@@ -223,3 +223,55 @@ describe('table grants', () => {
     assert.equal(row!.n, 0);
   });
 });
+
+describe('what the server itself calls', () => {
+  let test: TestDb;
+
+  before(async () => {
+    test = await migratedDatabase();
+  });
+
+  after(async () => test.close());
+
+  /**
+   * Every function invoked through `createAdminClient()` — the service-role
+   * client — has to be callable by `service_role`. Getting this wrong does not
+   * fail at build, at typecheck, or in any test that runs as a user: it fails
+   * at 08:00 on some future morning, and the symptom is departures quietly
+   * ceasing to appear.
+   *
+   * Keep this list in step with the call sites in `app/api/cron/route.ts` and
+   * anything else reaching for the admin client.
+   */
+  it('lets the service role call everything the scheduled job uses', async () => {
+    const calledByCron = [
+      'public.generate_departures(uuid, integer)',
+      'public.expire_stale_holds()',
+    ];
+
+    for (const signature of calledByCron) {
+      const [row] = await test.raw<{ ok: boolean }>(
+        `select has_function_privilege('service_role', $1, 'execute') as ok`,
+        [signature],
+      );
+      assert.equal(row!.ok, true, `${signature} is called by /api/cron as the service role`);
+    }
+  });
+
+  it('does not hand the service role the passenger-facing functions', async () => {
+    // Not a security boundary — service_role bypasses RLS and holds table
+    // privileges regardless. It is a statement of intent: these take their
+    // caller from auth.uid(), which is null for the service role, so calling
+    // them from a script would fail confusingly rather than usefully.
+    for (const signature of [
+      'public.request_booking(uuid, uuid, uuid, integer, integer, text)',
+      'public.approve_booking(uuid)',
+    ]) {
+      const [row] = await test.raw<{ ok: boolean }>(
+        `select has_function_privilege('service_role', $1, 'execute') as ok`,
+        [signature],
+      );
+      assert.equal(row!.ok, false, `${signature} is a user action, not a server one`);
+    }
+  });
+});
