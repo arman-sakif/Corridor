@@ -42,7 +42,12 @@ const anon = () =>
 
 const stamp = Date.now();
 const EMAIL = `auth-loop-${stamp}@corridor.test`;
-const PHONE = '(519) 555-0134';
+// Unique per run, like the email. A fixed number made the suite depend on its
+// own cleanup having succeeded: one leftover account from an interrupted run
+// still held it, and "editing your own profile is not a clash with yourself"
+// then failed correctly but for a reason that had nothing to do with the code.
+const PHONE = `(519) 555-${String(stamp).slice(-4)}`;
+const PHONE_PUNCTUATED = `+1 519-555-${String(stamp).slice(-4)}`;
 const FULL_NAME = 'Auth Loop';
 const PASSWORD = 'auth-loop-password-123';
 const NEW_PASSWORD = 'auth-loop-changed-456';
@@ -54,6 +59,21 @@ const check = (pass, name, detail = '') => {
   if (!pass) failures += 1;
   console.log(
     `${pass ? ' ok ' : 'FAIL'}  ${String(step).padStart(2)}. ${name}${detail ? ` — ${detail}` : ''}`,
+  );
+};
+
+/**
+ * Reports a deliberate gap without failing the run.
+ *
+ * Google is switched off on purpose, and a suite that always exits non-zero is
+ * a suite whose exit code stops meaning anything — people learn to read past
+ * the red instead of acting on it. The line still prints, so turning Google on
+ * later is visible here the moment it happens.
+ */
+const note = (pass, name, detail = '') => {
+  step += 1;
+  console.log(
+    `${pass ? ' ok ' : 'off '}  ${String(step).padStart(2)}. ${name}${detail ? ` — ${detail}` : ''}`,
   );
 };
 
@@ -81,10 +101,10 @@ async function main() {
     'email confirmation is off, so signup is one step',
     settings.mailer_autoconfirm ? '' : 'ON — Authentication → Providers → Email → Confirm email',
   );
-  check(
+  note(
     settings.external?.google === true,
     'the Google provider is configured',
-    settings.external?.google ? '' : 'not enabled — see README, "Google sign-in"',
+    settings.external?.google ? '' : 'deliberately off — see README, "Google sign-in"',
   );
 
   /* ------------------------------------------------- signup carries through */
@@ -255,7 +275,7 @@ async function main() {
   const { data: inUse, error: inUseError } = await admin.rpc('phone_in_use', { p_phone: PHONE });
   check(!inUseError && inUse === true, 'phone_in_use finds the number we just registered', inUseError?.message);
 
-  const { data: punctuated } = await admin.rpc('phone_in_use', { p_phone: '+1 519-555-0134' });
+  const { data: punctuated } = await admin.rpc('phone_in_use', { p_phone: PHONE_PUNCTUATED });
   check(punctuated === true, 'and matches it through different punctuation');
 
   const { data: excluded } = await admin.rpc('phone_in_use', {
