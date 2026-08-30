@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import { requestSeat } from '@/lib/booking/actions';
 import { FormMessage, SubmitButton, fieldError } from '@/components/form';
 import { Card, Field, Input, Select, Textarea } from '@/components/ui';
+import { IconLuggage, IconSeat } from '@/components/icons';
 import { idleState } from '@/lib/forms';
 import { formatCents } from '@/lib/money';
 import type { SurchargePolicy } from '@/lib/booking/fares';
@@ -112,7 +113,15 @@ export function RequestSeatForm({
         ) : null}
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Seats" error={fieldError(state, 'seats')}>
+          <Field
+            label={
+              <span className="inline-flex items-center gap-1.5">
+                <IconSeat className="text-sm text-ink-400" />
+                Seats
+              </span>
+            }
+            error={fieldError(state, 'seats')}
+          >
             <Select
               name="seats"
               value={seats}
@@ -127,7 +136,12 @@ export function RequestSeatForm({
           </Field>
 
           <Field
-            label="Bags"
+            label={
+              <span className="inline-flex items-center gap-1.5">
+                <IconLuggage className="text-sm text-ink-400" />
+                Bags
+              </span>
+            }
             hint="Roughly, so the driver can plan the boot."
             error={fieldError(state, 'luggage_count')}
           >
@@ -150,7 +164,7 @@ export function RequestSeatForm({
           <Textarea name="passenger_note" rows={2} />
         </Field>
 
-        <dl className="space-y-1 border-t border-ink-100 pt-4 text-sm">
+        <dl className="space-y-1.5 rounded-xl bg-ink-50 p-4 text-sm ring-1 ring-ink-200">
           <div className="flex justify-between text-ink-600">
             <dt>
               {seats} seat{seats === 1 ? '' : 's'} at {formatCents(selected?.baseCents ?? 0)}
@@ -171,9 +185,9 @@ export function RequestSeatForm({
               <dd className="numeric">{formatCents(airport)}</dd>
             </div>
           ) : null}
-          <div className="flex items-baseline justify-between pt-1 font-semibold text-ink-900">
+          <div className="mt-1 flex items-baseline justify-between border-t border-ink-200 pt-2.5 font-semibold text-ink-900">
             <dt>Total, paid to the driver</dt>
-            <dd className="numeric text-xl">{formatCents(total)}</dd>
+            <dd className="numeric text-2xl">{formatCents(total)}</dd>
           </div>
         </dl>
 

@@ -1,6 +1,5 @@
-import Link from 'next/link';
-
 import { SiteHeader } from '@/components/site-header';
+import { NavTabs } from '@/components/nav';
 import { requireAdmin } from '@/lib/auth/session';
 
 const tabs = [
@@ -16,17 +15,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
       <div className="border-b border-ink-200 bg-white">
-        <nav className="mx-auto flex max-w-6xl gap-1 px-4">
-          {tabs.map((tab) => (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className="border-b-2 border-transparent px-3 py-3 text-sm font-medium text-ink-600 hover:border-ink-300 hover:text-ink-900"
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="mx-auto max-w-6xl px-4">
+          <NavTabs
+            tabs={tabs.map((tab) => ({
+              href: tab.href,
+              label: tab.label,
+              exact: tab.href === '/admin',
+            }))}
+          />
+        </div>
       </div>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>
     </div>

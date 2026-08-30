@@ -3,50 +3,139 @@
 /*
  * Two audiences, one token set.
  *
- * Passengers get generous spacing and large tap targets; operators get dense
- * tables on a laptop. Both draw from the same palette so the product does not
- * feel like two products.
+ * Passengers arrive on a phone from a Kijiji link and need calm: generous
+ * space, one obvious action per screen, a running total they can trust.
+ * Operators sit at a laptop all day and need density: tables, tight rows,
+ * fast scanning. Both draw from the same palette so it reads as one product.
+ *
+ * The visual motif is the corridor itself — a line between stops. It shows up
+ * in the route timeline, the search results, and the load bars. Nothing here
+ * is decorative for its own sake; the line is the thing being sold.
  */
 @theme {
-  --color-ink-50: oklch(0.985 0.002 250);
-  --color-ink-100: oklch(0.967 0.003 250);
-  --color-ink-200: oklch(0.925 0.005 250);
-  --color-ink-300: oklch(0.865 0.007 250);
-  --color-ink-400: oklch(0.7 0.012 250);
-  --color-ink-500: oklch(0.58 0.015 250);
-  --color-ink-600: oklch(0.47 0.017 250);
-  --color-ink-700: oklch(0.38 0.018 250);
-  --color-ink-800: oklch(0.27 0.017 250);
-  --color-ink-900: oklch(0.19 0.015 250);
+  /* Neutrals, very slightly warm so long tables do not feel clinical. */
+  --color-ink-50: oklch(0.988 0.002 250);
+  --color-ink-100: oklch(0.972 0.003 250);
+  --color-ink-150: oklch(0.955 0.004 250);
+  --color-ink-200: oklch(0.928 0.005 250);
+  --color-ink-300: oklch(0.872 0.008 250);
+  --color-ink-400: oklch(0.715 0.014 250);
+  --color-ink-500: oklch(0.595 0.017 250);
+  --color-ink-600: oklch(0.487 0.019 252);
+  --color-ink-700: oklch(0.392 0.021 254);
+  --color-ink-800: oklch(0.282 0.022 256);
+  --color-ink-900: oklch(0.196 0.021 258);
+  --color-ink-950: oklch(0.145 0.020 260);
 
-  --color-brand-50: oklch(0.96 0.02 230);
-  --color-brand-100: oklch(0.92 0.045 230);
-  --color-brand-500: oklch(0.6 0.13 235);
-  --color-brand-600: oklch(0.52 0.14 238);
-  --color-brand-700: oklch(0.44 0.13 240);
+  /* Brand: a deep transit blue. Confident rather than bright — this is a
+     thing people trust with a 4am pickup, not a consumer app fighting for
+     attention. */
+  --color-brand-50: oklch(0.972 0.014 232);
+  --color-brand-100: oklch(0.934 0.034 232);
+  --color-brand-200: oklch(0.872 0.062 232);
+  --color-brand-300: oklch(0.782 0.098 234);
+  --color-brand-400: oklch(0.678 0.128 236);
+  --color-brand-500: oklch(0.586 0.146 240);
+  --color-brand-600: oklch(0.508 0.148 244);
+  --color-brand-700: oklch(0.432 0.132 246);
+  --color-brand-800: oklch(0.352 0.104 248);
+  --color-brand-900: oklch(0.282 0.078 250);
 
-  --color-good-100: oklch(0.94 0.04 155);
-  --color-good-700: oklch(0.46 0.11 155);
-  --color-warn-100: oklch(0.95 0.05 85);
-  --color-warn-700: oklch(0.5 0.12 70);
-  --color-bad-100: oklch(0.94 0.035 25);
-  --color-bad-700: oklch(0.5 0.16 25);
+  /* Accent, used sparingly: the price, and the one action that matters. */
+  --color-accent-100: oklch(0.945 0.055 168);
+  --color-accent-500: oklch(0.652 0.132 168);
+  --color-accent-600: oklch(0.562 0.122 170);
+  --color-accent-700: oklch(0.462 0.098 172);
 
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --color-good-50: oklch(0.972 0.020 158);
+  --color-good-100: oklch(0.928 0.048 158);
+  --color-good-600: oklch(0.552 0.118 158);
+  --color-good-700: oklch(0.452 0.098 158);
+
+  --color-warn-50: oklch(0.978 0.028 88);
+  --color-warn-100: oklch(0.938 0.062 86);
+  --color-warn-600: oklch(0.618 0.128 72);
+  --color-warn-700: oklch(0.498 0.112 66);
+
+  --color-bad-50: oklch(0.972 0.018 22);
+  --color-bad-100: oklch(0.932 0.042 22);
+  --color-bad-600: oklch(0.578 0.176 24);
+  --color-bad-700: oklch(0.488 0.158 24);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Elevation. Two steps only: resting and raised. More than that and a dense
+     operator table turns into soup. */
+  --shadow-card: 0 1px 2px oklch(0.196 0.021 258 / 0.04), 0 1px 3px oklch(0.196 0.021 258 / 0.06);
+  --shadow-raised: 0 2px 4px oklch(0.196 0.021 258 / 0.04), 0 8px 24px oklch(0.196 0.021 258 / 0.08);
+  --shadow-hero: 0 4px 12px oklch(0.196 0.021 258 / 0.06), 0 20px 48px oklch(0.196 0.021 258 / 0.10);
 }
 
 html {
   -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--color-ink-50);
+  background: var(--color-ink-100);
   color: var(--color-ink-900);
   font-family: var(--font-sans);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Tabular figures everywhere a price, a seat count, or a time is shown. */
+/* Prices, seat counts, times, dates — anything that should line up in a
+   column or not jitter as it updates. */
 .numeric {
   font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* Display type wants tighter tracking than body copy. */
+.display {
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+}
+
+/*
+ * The corridor motif: a vertical line threading a list of stops.
+ * Each <li> carries a dot; the line is drawn behind them and stops short at
+ * both ends so it reads as a journey rather than a border.
+ */
+.route-line {
+  position: relative;
+}
+.route-line::before {
+  content: '';
+  position: absolute;
+  left: 0.3125rem;
+  top: 0.75rem;
+  bottom: 0.75rem;
+  width: 2px;
+  background: linear-gradient(
+    to bottom,
+    var(--color-brand-300),
+    var(--color-brand-200) 50%,
+    var(--color-brand-300)
+  );
+  border-radius: 2px;
+}
+
+/* A subtle grid, used behind the hero so it is not a flat slab of colour. */
+.hero-grid {
+  background-image:
+    radial-gradient(circle at 1px 1px, oklch(0.508 0.148 244 / 0.10) 1px, transparent 0);
+  background-size: 28px 28px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
