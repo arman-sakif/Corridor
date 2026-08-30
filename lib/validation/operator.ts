@@ -173,3 +173,8 @@ export const memberRemoveSchema = z.object({
   operator_id: z.uuid(),
   member_id: z.uuid(),
 });
+
+export const inviteRevokeSchema = z.object({
+  operator_id: z.uuid(),
+  invite_id: z.uuid(),
+});

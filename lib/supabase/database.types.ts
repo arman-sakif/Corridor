@@ -61,6 +61,22 @@ export type IncityBookingStatus = 'held' | 'approved' | 'declined' | 'cancelled'
 type Relationships = {
   profiles: [];
   auth_recovery_requests: [];
+  operator_invites: [
+    {
+      foreignKeyName: 'operator_invites_operator_id_fkey';
+      columns: ['operator_id'];
+      isOneToOne: false;
+      referencedRelation: 'operators';
+      referencedColumns: ['id'];
+    },
+    {
+      foreignKeyName: 'operator_invites_invited_by_fkey';
+      columns: ['invited_by'];
+      isOneToOne: false;
+      referencedRelation: 'profiles';
+      referencedColumns: ['id'];
+    },
+  ];
   notifications: [
     {
       foreignKeyName: 'notifications_user_id_fkey';
@@ -398,6 +414,21 @@ type Timestamps = { created_at: string; updated_at: string };
 export interface Database {
   public: {
     Tables: {
+      operator_invites: Table<
+        'operator_invites',
+        {
+          id: string;
+          operator_id: string;
+          email: string;
+          role: OperatorMemberRole;
+          invited_by: string | null;
+          created_at: string;
+          accepted_at: string | null;
+          accepted_by: string | null;
+        },
+        'invited_by' | 'accepted_at' | 'accepted_by',
+        'id' | 'created_at'
+      >;
       notifications: Table<
         'notifications',
         {
