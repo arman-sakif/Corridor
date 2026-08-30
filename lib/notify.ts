@@ -101,19 +101,13 @@ async function deliver(recipients: string[], notification: Notification): Promis
   // In development, and anywhere the key is absent, log instead of sending.
   // A missing key must never be a silent no-op you cannot see.
   if (!apiKey) {
-    console.info('[notify]', {
-      to: recipients,
-      kind: notification.kind,
-      subject: notification.subject,
-      body: notification.body,
-      link,
-    });
+    logInstead(recipients, notification, link, 'no RESEND_API_KEY');
     return;
   }
 
   const resend = new Resend(apiKey);
 
-  await resend.emails.send({
+  const { error } = await resend.emails.send({
     // Falls back to Resend's sandbox sender, which is the only address that
     // works before a domain is verified. The previous default was a made-up
     // domain, so a project with a valid key and no NOTIFY_FROM_EMAIL got a
@@ -125,5 +119,38 @@ async function deliver(recipients: string[], notification: Notification): Promis
     to: recipients,
     subject: notification.subject,
     text: link ? `${notification.body}\n\n${link}` : notification.body,
+  });
+
+  // The SDK reports a rejected send by RETURNING an error, not by throwing —
+  // so notify()'s try/catch never sees it, and an unchecked call discards a
+  // 403 whole. That is how an unverified from-address turned every recovery
+  // email into "the email is on its way" plus a server log with nothing in it.
+  //
+  // Falling back to the log matters most on Resend's sandbox sender, which
+  // delivers only to the account owner. Every other recipient's message is
+  // refused, and this is the only thing that keeps the code inside it
+  // readable — which is what makes recovery testable without a domain.
+  if (error) {
+    logInstead(recipients, notification, link, `Resend refused it — ${error.message}`);
+  }
+}
+
+/**
+ * The message, in full, somewhere a person can still act on it. A sign-in code
+ * that failed to send is recoverable from here; one that was quietly dropped
+ * is gone, and the passenger is left holding a screen that says it was sent.
+ */
+function logInstead(
+  recipients: string[],
+  notification: Notification,
+  link: string | undefined,
+  why: string,
+): void {
+  console.info(`[notify] not delivered (${why})`, {
+    to: recipients,
+    kind: notification.kind,
+    subject: notification.subject,
+    body: notification.body,
+    link,
   });
 }
