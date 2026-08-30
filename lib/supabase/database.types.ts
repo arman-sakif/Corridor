@@ -33,7 +33,10 @@ export type NotificationKind =
   | 'payment_reminder'
   | 'incity_requested'
   | 'incity_approved'
-  | 'incity_declined';
+  | 'incity_declined'
+  | 'report_filed'
+  | 'report_resolved'
+  | 'feedback_filed';
 
 export type BookingStatus =
   | 'held'
@@ -57,6 +60,17 @@ export type RedFlagReason =
 
 export type IncityBookingStatus = 'held' | 'approved' | 'declined' | 'cancelled' | 'completed';
 
+export type ReportCategory =
+  | 'driving'
+  | 'lateness'
+  | 'vehicle'
+  | 'conduct'
+  | 'overcharged'
+  | 'safety'
+  | 'other';
+export type ReportStatus = 'open' | 'resolved';
+export type FeedbackKind = 'idea' | 'problem' | 'praise' | 'other';
+
 /**
  * Foreign keys, so an embedded select (`operator:operators(name)`) resolves to
  * the right shape. Generated from the migration rather than typed by hand.
@@ -64,6 +78,38 @@ export type IncityBookingStatus = 'held' | 'approved' | 'declined' | 'cancelled'
 type Relationships = {
   profiles: [];
   auth_recovery_requests: [];
+  feedback: [
+    {
+      foreignKeyName: 'feedback_user_id_fkey';
+      columns: ['user_id'];
+      isOneToOne: false;
+      referencedRelation: 'profiles';
+      referencedColumns: ['id'];
+    },
+  ];
+  reports: [
+    {
+      foreignKeyName: 'reports_booking_id_fkey';
+      columns: ['booking_id'];
+      isOneToOne: false;
+      referencedRelation: 'bookings';
+      referencedColumns: ['id'];
+    },
+    {
+      foreignKeyName: 'reports_operator_id_fkey';
+      columns: ['operator_id'];
+      isOneToOne: false;
+      referencedRelation: 'operators';
+      referencedColumns: ['id'];
+    },
+    {
+      foreignKeyName: 'reports_reporter_id_fkey';
+      columns: ['reporter_id'];
+      isOneToOne: false;
+      referencedRelation: 'profiles';
+      referencedColumns: ['id'];
+    },
+  ];
   operator_invites: [
     {
       foreignKeyName: 'operator_invites_operator_id_fkey';
@@ -430,6 +476,36 @@ export interface Database {
           accepted_by: string | null;
         },
         'invited_by' | 'accepted_at' | 'accepted_by',
+        'id' | 'created_at'
+      >;
+      reports: Table<
+        'reports',
+        {
+          id: string;
+          booking_id: string;
+          operator_id: string;
+          reporter_id: string;
+          category: ReportCategory;
+          note: string;
+          status: ReportStatus;
+          resolution: string | null;
+          resolved_at: string | null;
+          resolved_by: string | null;
+          created_at: string;
+        },
+        'status' | 'resolution' | 'resolved_at' | 'resolved_by',
+        'id' | 'created_at'
+      >;
+      feedback: Table<
+        'feedback',
+        {
+          id: string;
+          user_id: string;
+          kind: FeedbackKind;
+          message: string;
+          created_at: string;
+        },
+        never,
         'id' | 'created_at'
       >;
       notifications: Table<
@@ -841,6 +917,15 @@ export interface Database {
       approve_incity_ride: { Args: { p_id: string }; Returns: undefined };
       decline_incity_ride: { Args: { p_id: string }; Returns: undefined };
       cancel_incity_ride: { Args: { p_id: string }; Returns: undefined };
+      file_report: {
+        Args: { p_booking_id: string; p_category: ReportCategory; p_note: string };
+        Returns: string;
+      };
+      resolve_report: { Args: { p_id: string; p_resolution: string | null }; Returns: undefined };
+      raise_red_flag: {
+        Args: { p_booking_id: string; p_reason: RedFlagReason; p_note?: string | null };
+        Returns: string;
+      };
       phone_in_use: {
         Args: { p_phone: string; p_exclude?: string | null };
         Returns: boolean;
@@ -860,6 +945,9 @@ export interface Database {
       booking_status: BookingStatus;
       red_flag_reason: RedFlagReason;
       notification_kind: NotificationKind;
+      report_category: ReportCategory;
+      report_status: ReportStatus;
+      feedback_kind: FeedbackKind;
       incity_booking_status: IncityBookingStatus;
     };
     CompositeTypes: Record<string, never>;

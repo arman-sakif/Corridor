@@ -4,10 +4,12 @@ import { notFound } from 'next/navigation';
 
 import { PaymentConfirmForm } from './payment-form';
 import { RatingForm } from './rating-form';
+import { ReportForm } from './report-form';
 import { BookingStatusBadge } from '@/components/booking-status';
 import { cancelBooking } from '@/lib/booking/actions';
 import { Alert, Button, ButtonLink, Card, PageHeader } from '@/components/ui';
 import { requireViewer } from '@/lib/auth/session';
+import { reportsForBooking } from '@/lib/reports/queries';
 import { createClient } from '@/lib/supabase/server';
 import { dynamicRoute } from '@/lib/routes';
 import { formatCents } from '@/lib/money';
@@ -72,6 +74,12 @@ export default async function RideDetailPage({
   const cancellable = booking.status === 'held' || booking.status === 'approved';
   const awaitingPayment = booking.status === 'completed' && !booking.passenger_confirmed_at;
   const rateable = booking.status === 'completed' || booking.status === 'settled';
+
+  // Reportable from the moment the seat is confirmed: a driver who never came
+  // is exactly the kind of thing worth reporting, and that booking never
+  // reaches 'completed'.
+  const reportable = ['approved', 'completed', 'settled', 'no_show'].includes(booking.status);
+  const existingReports = reportable ? await reportsForBooking(booking.id) : [];
 
   return (
     <>
@@ -218,6 +226,34 @@ export default async function RideDetailPage({
               Other passengers see this on their profile.
             </p>
             <RatingForm bookingId={booking.id} />
+          </Card>
+        ) : null}
+
+        {/*
+          A rating is public and a matter of degree; a report is private, goes
+          to a person, and expects an answer. Somebody who felt unsafe should
+          not have to express that as three stars.
+        */}
+        {reportable ? (
+          <Card className="p-5">
+            <h2 className="font-semibold text-ink-900">Something went wrong?</h2>
+            <p className="mt-1 mb-4 text-sm text-ink-600">
+              Tell {booking.departure?.operator?.name} and Corridor. Both see it, and you will hear
+              what came of it.
+            </p>
+            {existingReports.length > 0 ? (
+              <div className="mb-4 space-y-2">
+                {existingReports.map((report) => (
+                  <Alert key={report.id} tone={report.status === 'open' ? 'warn' : 'good'}>
+                    {report.status === 'open'
+                      ? 'You reported this trip. It is with the operator and Corridor.'
+                      : `Closed${report.resolution ? `: ${report.resolution}` : '.'}`}
+                  </Alert>
+                ))}
+              </div>
+            ) : (
+              <ReportForm bookingId={booking.id} />
+            )}
           </Card>
         ) : null}
 

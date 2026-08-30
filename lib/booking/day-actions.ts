@@ -221,34 +221,40 @@ export async function rateOperator(_prev: FormState, formData: FormData): Promis
   return succeed('Thanks — that helps the next passenger.');
 }
 
+/**
+ * Marks a passenger, from either side of the operator.
+ *
+ * Through `raise_red_flag()` rather than an insert, because
+ * `red_flags_insert_operator` requires `is_operator_manager` — which meant the
+ * one person who actually watched the trip happen, the driver, could not
+ * record what they saw. The function admits a manager or the driver assigned
+ * to that departure, exactly as `mark_no_show()` does, and resolves the
+ * operator and passenger from the booking so neither can be handed in.
+ */
 export async function raiseRedFlag(_prev: FormState, formData: FormData): Promise<FormState> {
   const parsed = parseForm(redFlagSchema, formData);
   if (!parsed.ok) return parsed.state;
 
-  const viewer = await requireViewer('/');
+  await requireViewer('/');
 
   const supabase = await createClient();
+  const { error } = await supabase.rpc('raise_red_flag', {
+    p_booking_id: parsed.data.booking_id,
+    p_reason: parsed.data.reason,
+    p_note: parsed.data.note || null,
+  });
+
+  if (error) return fail(error.message);
+
   const { data: booking } = await supabase
     .from('bookings')
-    .select('id, passenger_id, departure_id, departure:departures(operator_id)')
+    .select('departure_id')
     .eq('id', parsed.data.booking_id)
     .maybeSingle();
 
-  const operatorId = (booking?.departure as unknown as { operator_id: string } | null)?.operator_id;
-  if (!booking || !operatorId) return fail('That booking no longer exists.');
+  if (booking?.departure_id) await revalidateDeparture(booking.departure_id);
+  revalidatePath('/driver');
 
-  const { error } = await supabase.from('red_flags').insert({
-    booking_id: booking.id,
-    operator_id: operatorId,
-    passenger_id: booking.passenger_id,
-    reason: parsed.data.reason,
-    note: parsed.data.note || null,
-    created_by: viewer.userId,
-  });
-
-  if (error) return fail('We could not record that. Try again in a moment.');
-
-  await revalidateDeparture(booking.departure_id);
   return succeed('Recorded. Other operators will see this before they approve a request.');
 }
 
