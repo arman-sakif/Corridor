@@ -35,7 +35,7 @@ publish a timetable, take real bookings, run the day, and settle payment.
 | 4 | Booking: the hold, capacity, approve/decline, cancellation | **built** |
 | 5 | Departure day: assignment, manifest, completion, settlement | **built** |
 | 6 | In-city add-on: zones, the checkout add-on, separate approval | **built** |
-| 7 | Subscription tracking, then mobile | tables only |
+| 7 | Subscription tracking | **built** · mobile apps not started |
 
 Not yet wired: Google OAuth (needs credentials) and a notifications table for
 the in-app list.

@@ -1,8 +1,11 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { SiteHeader } from '@/components/site-header';
 import { NavTabs } from '@/components/nav';
 import { requireViewer } from '@/lib/auth/session';
+import { createClient } from '@/lib/supabase/server';
+import { dynamicRoute } from '@/lib/routes';
 import { Alert, Badge } from '@/components/ui';
 
 const intercityTabs = [
@@ -14,6 +17,7 @@ const intercityTabs = [
   { segment: '/stops', label: 'Stops' },
   { segment: '/fleet', label: 'Fleet' },
   { segment: '/complaints', label: 'Complaints' },
+  { segment: '/billing', label: 'Billing' },
   { segment: '/team', label: 'Team' },
   { segment: '/settings', label: 'Settings' },
 ] as const;
@@ -30,6 +34,7 @@ const incityTabs = [
   { segment: '/zones', label: 'Zones' },
   { segment: '/stops', label: 'Pickup points' },
   { segment: '/complaints', label: 'Complaints' },
+  { segment: '/billing', label: 'Billing' },
   { segment: '/team', label: 'Team' },
   { segment: '/settings', label: 'Settings' },
 ] as const;
@@ -53,6 +58,16 @@ export default async function OperatorLayout({
 
   const operator = membership.operator;
   const tabs = operator?.type === 'incity' ? incityTabs : intercityTabs;
+
+  const supabase = await createClient();
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('status')
+    .eq('operator_id', operatorId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const pastDue = subscription?.status === 'past_due';
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -90,6 +105,23 @@ export default async function OperatorLayout({
             <Alert tone="warn">
               Passengers cannot see you yet. Set up your stops, routes, fares, and timetable now —
               the moment Corridor vets your business, your departures go on sale.
+            </Alert>
+          </div>
+        ) : null}
+
+        {/*
+          `past_due` has been decorative since the table was written — nothing
+          read it. It warns now and does nothing else: cutting off a live
+          operator would strand passengers who already hold confirmed seats,
+          and the person who forgot an e-transfer is not the person who would
+          be punished for it.
+        */}
+        {pastDue ? (
+          <div className="mb-6">
+            <Alert tone="warn">
+              Your Corridor subscription is overdue. Nothing has stopped and your passengers see no
+              difference — <Link href={dynamicRoute(`/operator/${operatorId}/billing`)} className="font-medium underline">check your billing</Link>{' '}
+              when you have a moment.
             </Alert>
           </div>
         ) : null}

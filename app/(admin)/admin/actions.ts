@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/auth/session';
 import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
 import { createClient } from '@/lib/supabase/server';
+import { dynamicRoute } from '@/lib/routes';
+import { todayInToronto } from '@/lib/time';
 import {
   cityCreateSchema,
   cityToggleSchema,
@@ -94,6 +96,7 @@ export async function saveSubscription(
     operator_id: parsed.data.operator_id,
     plan: parsed.data.plan,
     status: parsed.data.status,
+    amount_cents: parsed.data.amount ?? 0,
     current_period_end: parsed.data.current_period_end || null,
   };
 
@@ -103,6 +106,26 @@ export async function saveSubscription(
 
   if (error) return fail('We could not record that subscription. Try again in a moment.');
 
+  // A payment is a fact that happened on a day, not a field to overwrite. The
+  // subscription row says what they owe now; the ledger says what has landed,
+  // and saving the row again must not quietly rewrite that history.
+  if (parsed.data.record_payment && values.amount_cents > 0) {
+    const viewer = await requireAdmin();
+
+    const { error: ledgerError } = await supabase.from('subscription_payments').insert({
+      operator_id: parsed.data.operator_id,
+      amount_cents: values.amount_cents,
+      paid_on: todayInToronto(),
+      covers_until: values.current_period_end,
+      recorded_by: viewer.userId,
+    });
+
+    if (ledgerError) {
+      return fail('The plan was saved, but the payment did not record. Try recording it again.');
+    }
+  }
+
   revalidatePath('/admin/subscriptions');
-  return succeed('Subscription recorded.');
+  revalidatePath(dynamicRoute(`/operator/${parsed.data.operator_id}/billing`));
+  return succeed(parsed.data.record_payment ? 'Payment recorded.' : 'Subscription saved.');
 }

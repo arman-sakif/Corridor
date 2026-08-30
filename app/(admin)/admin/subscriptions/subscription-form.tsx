@@ -5,6 +5,7 @@ import { useActionState } from 'react';
 import { saveSubscription } from '../actions';
 import { SubmitButton } from '@/components/form';
 import { Input, Select } from '@/components/ui';
+import { centsToInput } from '@/lib/money';
 import { idleState } from '@/lib/forms';
 import type { SubscriptionPlan, SubscriptionStatus } from '@/lib/supabase/database.types';
 
@@ -21,6 +22,7 @@ export function SubscriptionForm({
   current: {
     plan: SubscriptionPlan;
     status: SubscriptionStatus;
+    amount_cents: number;
     current_period_end: string | null;
   } | null;
 }) {
@@ -42,12 +44,26 @@ export function SubscriptionForm({
       </Select>
 
       <Input
+        name="amount"
+        inputMode="decimal"
+        defaultValue={current ? centsToInput(current.amount_cents) : ''}
+        placeholder="120.00"
+        className="w-24"
+        aria-label="Amount per period"
+      />
+
+      <Input
         type="date"
         name="current_period_end"
         defaultValue={current?.current_period_end ?? ''}
         className="w-40"
         aria-label="Paid through"
       />
+
+      <label className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-600">
+        <input type="checkbox" name="record_payment" />
+        Money landed
+      </label>
 
       <SubmitButton size="sm" tone="secondary" pendingLabel="Saving…">
         Save

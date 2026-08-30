@@ -28,6 +28,20 @@ export const subscriptionSchema = z.object({
   operator_id: z.uuid('Unknown operator.'),
   plan: z.enum(['weekly', 'monthly']),
   status: z.enum(['active', 'past_due', 'cancelled']),
+  // Per operator, not per plan: the first customers of anything are signed one
+  // at a time, and a founding discount should not need a code change.
+  amount: z
+    .string()
+    .trim()
+    .regex(/^\d+(\.\d{1,2})?$/, 'Enter an amount like 120 or 120.00.')
+    .transform((value) => Math.round(Number(value) * 100))
+    .optional()
+    .or(z.literal('').transform(() => 0)),
+  /** Ticked when this save is recording money that actually arrived. */
+  record_payment: z
+    .union([z.literal('on'), z.literal('')])
+    .optional()
+    .transform((value) => value === 'on'),
   current_period_end: z
     .string()
     .trim()
