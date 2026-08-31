@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { AssignVehicleControl, RedFlagForm } from './assignment';
 import { AddVehicleForm } from './add-vehicle-form';
+import { RatePassengerForm } from '@/components/rate-passenger-form';
 import { BookingStatusBadge } from '@/components/booking-status';
 import {
   completeDeparture,
@@ -362,6 +363,32 @@ export default async function DepartureDayPage({
                 id: p.id,
                 name: p.passenger?.full_name ?? 'Passenger',
               }))} />
+            </Card>
+          ) : null}
+
+          {/*
+            The other half of the same judgement. A flag says something went
+            wrong; this is how a passenger with ten uneventful trips comes to
+            look like one in the next operator's approval queue, which until
+            now could only count the ways it had gone badly.
+          */}
+          {departure.status === 'completed' && riding.length > 0 ? (
+            <Card className="p-5">
+              <h2 className="font-semibold text-ink-900">Rate a passenger</h2>
+              <p className="mt-1 mb-4 text-sm text-ink-600">
+                Shown as an average to operators deciding on their next request. The passenger
+                never sees it.
+              </p>
+              <ul className="space-y-3">
+                {riding.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-ink-900">
+                      {p.passenger?.full_name ?? 'Passenger'}
+                    </span>
+                    <RatePassengerForm bookingId={p.id} />
+                  </li>
+                ))}
+              </ul>
             </Card>
           ) : null}
         </div>

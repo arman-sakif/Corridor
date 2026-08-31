@@ -31,3 +31,6 @@ this file is the signpost:
 | `request_incity_ride()` | `20260830000020_incity.sql` | The in-city add-on. Checks the parent booking, the operator, the zone and the pickup city, then snapshots the zone price. |
 | `approve_incity_ride()`, `decline_incity_ride()`, `cancel_incity_ride()` | `20260830000020_incity.sql` | Guarded status transitions for a local ride. |
 | `cancel_incity_on_parent()` | `20260830000020_incity.sql` | Trigger — a seat that goes away takes its local ride with it. |
+| `rate_passenger()` | `20260830000026_rate_passenger.sql` | The operator side of a rating. Manager or assigned driver; the subject comes from the booking. |
+| `raise_red_flag()` | `20260830000024_driver_red_flags.sql` | A mark on a passenger, raiseable by the driver who was actually there. |
+| `file_report()`, `resolve_report()` | `20260830000023_reports_and_feedback.sql` | A passenger complains about a trip; the operator or an admin closes it. |
