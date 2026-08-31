@@ -193,6 +193,10 @@ async function seedAll() {
   }
   console.log(`${passengerIds.length} passengers.`);
 
+  // Vehicles and drivers per operator, so assignments can be made after the
+  // bookings exist and the manifest knows who is actually on board.
+  const fleetByOperator = {};
+
   const departureRows = [];
   const ratingRows = [];
   const redFlagRows = [];
@@ -279,8 +283,12 @@ async function seedAll() {
         .select('id')
         .single();
       if (error) die(`Could not create the vehicle ${label}`, error);
-      vehicleIds.push(data.id);
+      // Seats travel with the id: assignment below packs riders into vans and
+      // must not put nine people in a seven-seater.
+      vehicleIds.push({ id: data.id, seats });
     }
+
+    fleetByOperator[operatorId] = { vehicles: vehicleIds.slice(), drivers: driverIds.slice() };
 
     /* ---- routes, both directions --------------------------------------- */
     const priceByPair = new Map(op.fares.map(([a, b, price]) => [pairKey(a, b), cents(price)]));
@@ -489,6 +497,9 @@ async function seedAll() {
 
   /* ---- bookings -------------------------------------------------------- */
   await seedBookings({ passengerIds, ratingRows, redFlagRows });
+
+  /* ---- who drives what ------------------------------------------------- */
+  await seedVehicleAssignments(fleetByOperator);
 
   console.log(`\nSummary`);
   console.log(`  cities      ${CITIES.length}`);
@@ -805,6 +816,118 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
   console.log(
     `${ratingRows.length} ratings, ${redFlagRows.length} red flags, ${reportRows.length} complaints, ${feedbackRows.length} feedback.`,
   );
+}
+
+/**
+ * Puts vans and drivers on the departures around today, and the riders in them.
+ *
+ * Without this every driver manifest is empty, and `/driver` shows a person
+ * who genuinely drives for an operator that they have nothing to drive. It was
+ * the last screen in the product with no data behind it.
+ *
+ * Two things it is careful about, because seed data that breaks an invariant
+ * makes the bug it hides impossible to see:
+ *
+ * - **A van is never overfilled.** Riders are packed by `seat_count`, and a
+ *   departure that needs two vans gets two.
+ * - **A rider's vehicle is always on their departure.** `assign_booking_vehicle()`
+ *   enforces that at runtime; writing rows directly bypasses it, so the packing
+ *   below only ever names a van it has just put on that trip.
+ *
+ * Scoped to a window around today rather than all 1000 departures: the point is
+ * that today's and yesterday's manifests have people on them, and assigning a
+ * van to a trip three weeks out is not something an operator would have done.
+ */
+async function seedVehicleAssignments(fleetByOperator) {
+  const serviceToday = todayInToronto();
+  // Matched to the window `/driver` shows (-1 to +14) with a week of history
+  // either side, so a driver signing in has both a trip behind them and trips
+  // ahead — the page has a "Today" and a "Coming up" section and both should
+  // have something in them.
+  const from = addDays(serviceToday, -7);
+  const to = addDays(serviceToday, 14);
+
+  // 240 bookings exist in total, so this sits well inside PostgREST's 1000-row
+  // cap. Narrow the window before widening it if that ever stops being true.
+  const { data: rows, error } = await db
+    .from('bookings')
+    .select('id, seats, departure_id, departure:departures!inner(id, operator_id, service_date)')
+    .in('status', ['approved', 'completed', 'settled', 'no_show'])
+    .gte('departure.service_date', from)
+    .lte('departure.service_date', to)
+    .order('from_seq');
+
+  if (error) die('Could not read bookings to assign', error);
+
+  const byDeparture = new Map();
+  for (const row of rows ?? []) {
+    const list = byDeparture.get(row.departure_id) ?? {
+      operatorId: row.departure.operator_id,
+      riders: [],
+    };
+    list.riders.push({ id: row.id, seats: row.seats });
+    byDeparture.set(row.departure_id, list);
+  }
+
+  const dealtByOperator = new Map();
+  let vans = 0;
+  let seated = 0;
+  let driven = 0;
+
+  for (const [departureId, { operatorId, riders }] of byDeparture) {
+    const fleet = fleetByOperator[operatorId];
+    if (!fleet?.vehicles.length) continue;
+
+    // Pack riders into vans in stop order, opening a new one when the current
+    // is full. An operator with one van and more passengers than seats simply
+    // leaves the rest unassigned, which is a real state the screens handle.
+    let vanIndex = 0;
+    let remaining = fleet.vehicles[0].seats;
+    const used = new Map();
+
+    for (const rider of riders) {
+      if (rider.seats > remaining) {
+        vanIndex += 1;
+        if (vanIndex >= fleet.vehicles.length) break;
+        remaining = fleet.vehicles[vanIndex].seats;
+      }
+
+      const van = fleet.vehicles[vanIndex];
+      remaining -= rider.seats;
+
+      const bucket = used.get(van.id) ?? [];
+      bucket.push(rider.id);
+      used.set(van.id, bucket);
+    }
+
+    for (const [vehicleId, bookingIds] of used) {
+      // Dealt round-robin *within* each operator. Counting globally meant a
+      // two-driver business could hand nearly every trip to one of them,
+      // depending on how many vans the other operators happened to need first.
+      // An operator with no drivers still gets a van with nobody named, which
+      // is what a business looks like before it has added its team.
+      const dealt = dealtByOperator.get(operatorId) ?? 0;
+      const driverId = fleet.drivers.length ? fleet.drivers[dealt % fleet.drivers.length] : null;
+      dealtByOperator.set(operatorId, dealt + 1);
+
+      const { error: vanError } = await db
+        .from('departure_vehicles')
+        .insert({ departure_id: departureId, vehicle_id: vehicleId, driver_id: driverId });
+      if (vanError) die('Could not put a vehicle on a departure', vanError);
+
+      const { error: seatError } = await db
+        .from('bookings')
+        .update({ assigned_vehicle_id: vehicleId })
+        .in('id', bookingIds);
+      if (seatError) die('Could not assign passengers to a vehicle', seatError);
+
+      vans += 1;
+      seated += bookingIds.length;
+      if (driverId) driven += 1;
+    }
+  }
+
+  console.log(`${vans} vehicles on departures, ${seated} passengers seated in them.`);
 }
 
 const NOTES = [

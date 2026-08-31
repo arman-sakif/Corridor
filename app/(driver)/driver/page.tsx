@@ -28,7 +28,7 @@ type Assignment = {
  * anything — operators publish schedules, and this is downstream of that.
  */
 export default async function DriverPage() {
-  await requireViewer('/driver');
+  const viewer = await requireViewer('/driver');
 
   const supabase = await createClient();
   const today = todayInToronto();
@@ -40,6 +40,12 @@ export default async function DriverPage() {
        departure:departures!inner(id, service_date, departure_time, status,
          operator:operators(name), route:routes(name))`,
     )
+    // Theirs, not the whole operator's. `departure_vehicles_select_member`
+    // admits any member, so without this a driver saw every van the business
+    // had out — and opening somebody else's trip showed an empty manifest,
+    // because RLS on `bookings` rightly refused passengers they are not
+    // carrying. It read as "nobody booked" rather than "not your trip".
+    .eq('driver_id', viewer.userId)
     .gte('departure.service_date', addDays(today, -1))
     .lte('departure.service_date', addDays(today, 14))
     .order('service_date', { referencedTable: 'departures' });
