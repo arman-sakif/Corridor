@@ -1,11 +1,10 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { PastDueBanner } from '@/components/past-due-banner';
 import { SiteHeader } from '@/components/site-header';
 import { NavTabs } from '@/components/nav';
 import { requireViewer } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
-import { dynamicRoute } from '@/lib/routes';
 import { Alert, Badge } from '@/components/ui';
 
 const intercityTabs = [
@@ -115,16 +114,10 @@ export default async function OperatorLayout({
           operator would strand passengers who already hold confirmed seats,
           and the person who forgot an e-transfer is not the person who would
           be punished for it.
+
+          The banner hides itself on the billing page, which has its own.
         */}
-        {pastDue ? (
-          <div className="mb-6">
-            <Alert tone="warn">
-              Your Corridor subscription is overdue. Nothing has stopped and your passengers see no
-              difference — <Link href={dynamicRoute(`/operator/${operatorId}/billing`)} className="font-medium underline">check your billing</Link>{' '}
-              when you have a moment.
-            </Alert>
-          </div>
-        ) : null}
+        {pastDue ? <PastDueBanner operatorId={operatorId} /> : null}
         {children}
       </main>
     </div>
