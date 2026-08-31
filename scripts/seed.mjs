@@ -790,8 +790,20 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
     const { error } = await db.from('reports').insert(reportRows);
     if (error) die('Could not create complaints', error);
   }
+
+  // Feedback about the product rather than a trip. Spread across passengers so
+  // /admin/feedback shows more than one name. No teardown needed: user_id
+  // cascades when the demo accounts go.
+  const feedbackRows = FEEDBACK.map(([kind, message], index) => ({
+    user_id: passengerIds[index % passengerIds.length],
+    kind,
+    message,
+  }));
+
+  const { error: feedbackError } = await db.from('feedback').insert(feedbackRows);
+  if (feedbackError) die('Could not create feedback', feedbackError);
   console.log(
-    `${ratingRows.length} ratings, ${redFlagRows.length} red flags, ${reportRows.length} complaints.`,
+    `${ratingRows.length} ratings, ${redFlagRows.length} red flags, ${reportRows.length} complaints, ${feedbackRows.length} feedback.`,
   );
 }
 
@@ -808,6 +820,17 @@ const NOTES = [
  * about the trip rather than about a named driver, because a passenger never
  * learns who was driving.
  */
+/**
+ * Product feedback, as distinct from a complaint about a trip. Written the way
+ * people actually send these — one specific annoyance each, no structure.
+ */
+const FEEDBACK = [
+  ['idea', 'Could search remember where I usually go? I book Windsor to Toronto most weeks and type it in every time.'],
+  ['problem', 'On my phone the date picker opens under the keyboard and I cannot see what I am tapping.'],
+  ['idea', 'I would pay to be told when a seat opens up on a departure that is full.'],
+  ['praise', 'Being able to see which operator and what time before I commit is the whole reason I stopped using the Facebook groups.'],
+];
+
 const COMPLAINTS = [
   {
     category: 'lateness',
