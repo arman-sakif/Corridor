@@ -7,6 +7,7 @@ import { requireOperatorRole, requireViewer } from '@/lib/auth/session';
 import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { findAcrossPages } from '@/lib/operator/paging';
 import {
   inviteRevokeSchema,
   memberInviteSchema,
@@ -167,22 +168,16 @@ export async function revokeInvite(formData: FormData): Promise<void> {
  */
 async function findUserByEmail(email: string): Promise<{ id: string } | null> {
   const admin = createAdminClient();
-  const perPage = 1000;
-  const maxPages = 50;
 
-  for (let page = 1; page <= maxPages; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
-    if (error || !data) return null;
-
-    const match = data.users.find((user) => user.email?.toLowerCase() === email);
-    if (match) return match;
-
-    // A short page is the last page.
-    if (data.users.length < perPage) return null;
-  }
-
-  console.error('findUserByEmail gave up paging', { pages: maxPages, perPage });
-  return null;
+  // The walking is in `paging.ts` and unit-tested there. This function is only
+  // the part that needs a live GoTrue, which is the part that was never wrong.
+  return findAcrossPages(
+    async (page, perPage) => {
+      const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+      return error || !data ? null : data.users;
+    },
+    (user) => user.email?.toLowerCase() === email,
+  );
 }
 
 export async function removeTeamMember(formData: FormData): Promise<void> {

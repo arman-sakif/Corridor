@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { DriverFlagForm } from './driver-flag-form';
+import { RatePassengerForm } from '@/components/rate-passenger-form';
 import { SiteHeader } from '@/components/site-header';
 import { BookingStatusBadge } from '@/components/booking-status';
 import { completeDeparture, confirmPaymentAsDriver, markNoShow } from '@/lib/booking/day-actions';
@@ -205,6 +206,10 @@ export default async function DriverManifestPage({
                       */}
                       {rider.status !== 'no_show' ? (
                         <DriverFlagForm bookingId={rider.id} />
+                      ) : null}
+
+                      {rider.status === 'completed' || rider.status === 'settled' ? (
+                        <RatePassengerForm bookingId={rider.id} />
                       ) : null}
                     </div>
                   </div>

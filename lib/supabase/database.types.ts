@@ -923,6 +923,9 @@ export interface Database {
           cancelled: number;
           no_shows: number;
           red_flags: number;
+          /** Numeric in Postgres, so it arrives as a string over PostgREST. */
+          rating_avg: string | null;
+          rating_count: number;
         }[];
       };
       mark_notifications_read: {
@@ -949,6 +952,10 @@ export interface Database {
       resolve_report: { Args: { p_id: string; p_resolution: string | null }; Returns: undefined };
       raise_red_flag: {
         Args: { p_booking_id: string; p_reason: RedFlagReason; p_note?: string | null };
+        Returns: string;
+      };
+      rate_passenger: {
+        Args: { p_booking_id: string; p_score: number; p_comment?: string | null };
         Returns: string;
       };
       phone_in_use: {

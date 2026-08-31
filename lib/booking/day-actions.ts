@@ -177,6 +177,44 @@ export async function confirmPaymentAsDriver(formData: FormData): Promise<void> 
 
 /* --------------------------------------------------- ratings and flags */
 
+/**
+ * The operator's rating of a passenger.
+ *
+ * Through `rate_passenger()` because the caller may be the assigned driver,
+ * who holds no write policy anywhere and reaches every write through a
+ * function that first proves they were on that trip. The function also decides
+ * *who* is being rated, from the booking — there is no parameter for it.
+ *
+ * A rating is not a red flag. A flag says something went wrong; this is how a
+ * passenger with ten uneventful trips gets to look like one.
+ */
+export async function ratePassenger(_prev: FormState, formData: FormData): Promise<FormState> {
+  const parsed = parseForm(ratingSchema, formData);
+  if (!parsed.ok) return parsed.state;
+
+  await requireViewer('/');
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('rate_passenger', {
+    p_booking_id: parsed.data.booking_id,
+    p_score: parsed.data.score,
+    p_comment: parsed.data.comment || null,
+  });
+
+  if (error) return fail(error.message);
+
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select('departure_id')
+    .eq('id', parsed.data.booking_id)
+    .maybeSingle();
+
+  if (booking?.departure_id) await revalidateDeparture(booking.departure_id);
+  revalidatePath('/driver');
+
+  return succeed('Recorded. It shows to operators deciding on their next request.');
+}
+
 export async function rateOperator(_prev: FormState, formData: FormData): Promise<FormState> {
   const parsed = parseForm(ratingSchema, formData);
   if (!parsed.ok) return parsed.state;

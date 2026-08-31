@@ -20,7 +20,8 @@ export async function PassengerHistory({ passengerId }: { passengerId: string })
     history.completed === 0 &&
     history.cancelled === 0 &&
     history.no_shows === 0 &&
-    history.red_flags === 0;
+    history.red_flags === 0 &&
+    history.rating_count === 0;
 
   if (isNew) {
     return (
@@ -34,6 +35,15 @@ export async function PassengerHistory({ passengerId }: { passengerId: string })
     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
       <span className="text-ink-500">On Corridor:</span>
       <Badge tone="good">{history.completed} completed</Badge>
+      {history.rating_count > 0 ? (
+        // The one thing on this line that is good news rather than the absence
+        // of bad news. An operator weighing up a stranger had four counts,
+        // three of which were ways it could go wrong.
+        <Badge tone="good">
+          {history.rating_avg} out of 5 from {history.rating_count} operator
+          {history.rating_count === 1 ? '' : 's'}
+        </Badge>
+      ) : null}
       {history.cancelled > 0 ? (
         <Badge tone="neutral">{history.cancelled} cancelled or lapsed</Badge>
       ) : null}
