@@ -23,8 +23,10 @@ The operator research the seed data is built from:
 
 ## Status
 
-Phases 0–5 — the MVP — are built and deployed. An operator can be onboarded,
-publish a timetable, take real bookings, run the day, and settle payment.
+Every phase is built and deployed. An operator can be onboarded, publish a
+timetable, take real bookings, run the day, and settle payment; passengers can
+add a local ride at the far end and report a trip that went wrong. Phases 0–5
+are the MVP; 6 and 7 followed.
 
 | Phase | Scope | State |
 |---|---|---|
@@ -37,8 +39,17 @@ publish a timetable, take real bookings, run the day, and settle payment.
 | 6 | In-city add-on: zones, the checkout add-on, separate approval | **built** |
 | 7 | Subscription tracking | **built** · mobile apps not started |
 
-Not yet wired: Google OAuth (needs credentials) and a notifications table for
-the in-app list.
+Beyond the seven phases, three things were added because the product needed
+them rather than because a roadmap asked:
+
+| | |
+|---|---|
+| **Notifications** | An in-app list with an unread badge, plus email. The in-app half is the one that works — see the sender note below. |
+| **Complaints** | A passenger reports a *trip*; the operator and a platform admin are both told, and either can close it with a note the passenger sees. The other direction stays a red flag, which the assigned driver can now raise too. |
+| **Feedback** | Anyone signed in can send an idea or an annoyance from *Tell us*; admins read them at `/admin/feedback`. |
+
+Not yet wired: Google OAuth, which needs credentials. Everything else in the
+code path is complete.
 
 **Email is on Resend's sandbox sender**, which delivers only to the address the
 Resend account was opened with. That is a deliberate prototype constraint —
@@ -225,10 +236,13 @@ free themselves whether or not the sweep has run.
 | `npm test` | Everything — unit tests and the database tests. |
 | `npm run test:unit` | Fares, capacity, money, time. Fast. |
 | `npm run test:db` | The real migrations against real Postgres. |
-| `node scripts/auth-loop.mjs` | Signup and both recovery paths against the live database. |
 | `npm run typecheck` | `tsc --noEmit`. |
+| `npm run lint` | oxlint. See [`docs/linting.md`](docs/linting.md) for why it is not ESLint. |
+| `npm run lint:fix` | The same, applying what it can fix. |
 | `npm run db:types` | Regenerate `lib/supabase/database.types.ts` from a live schema. |
-| `node scripts/seed.mjs` | Rebuild the demo data. |
+| `node scripts/seed.mjs` | Rebuild the demo data. `--remove` takes it back out. |
+| `node scripts/e2e-loop.mjs` | The whole booking loop against a running app, request through settlement. |
+| `node scripts/auth-loop.mjs` | Signup and both recovery paths against the live database. |
 | `node scripts/race-test.mjs` | Race the seat lock against the live database. |
 
 ### The database tests
@@ -265,22 +279,30 @@ revenue that never arrives.
 
 ```
 app/
-  (public)/      search, departure detail, operator profiles, sign in
-  (passenger)/   my rides, booking detail, profile, ratings
-  (operator)/    setup, bookings queue, departures, fleet, team
-  (driver)/      today, manifest
-  (admin)/       operator vetting, cities, subscriptions
+  (public)/      search, departure detail, operator profiles, sign in, recovery
+  (passenger)/   my rides, booking detail, the local ride, notifications,
+                 profile, ratings, reports, feedback
+  (operator)/    setup, bookings queue, departures, fleet, team, zones,
+                 complaints, billing
+  (driver)/      today, manifest, flagging a passenger
+  (admin)/       operator vetting, cities, subscriptions, complaints, feedback
   api/           manifest CSV, the daily job
-components/      UI primitives, icons, navigation
+  auth/          callback (PKCE) and confirm (token hash)
+components/      UI primitives, icons, navigation, shared complaint list
 lib/
+  auth/          session, role routing, sign-in, recovery, password strength
   booking/       fares, capacity, search, booking and departure-day actions
+  incity/        the local-ride add-on — isolated, imported by nothing else
+  notifications/ reading the in-app list
   operator/      setup actions
+  reports/       complaints and feedback
   supabase/      clients and types
   validation/    zod schemas
+  notify.ts      the one seam every notification goes through
 supabase/
   migrations/    numbered SQL — schema, RLS, and every Postgres function
   tests/         the migrations, run against real Postgres
-scripts/         seeding and the race test
+scripts/         seeding, and the loops that run against the real database
 ```
 
 Two rules about these boundaries:
