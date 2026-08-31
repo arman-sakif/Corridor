@@ -64,7 +64,13 @@ export default async function DriverManifestPage({
     .eq('departure_id', departureId);
 
   const mine = (assignments ?? []).find((a) => a.driver_id === viewer.userId);
-  const vehicleId = query.vehicle ?? mine?.vehicle?.id;
+
+  // Not their trip. RLS already refuses the passengers, so the page was safe —
+  // but it rendered "Nobody in this vehicle yet", which reads as an empty van
+  // rather than somebody else's. Say the true thing instead.
+  if (!mine) notFound();
+
+  const vehicleId = query.vehicle ?? mine.vehicle?.id;
 
   let query_ = supabase
     .from('bookings')

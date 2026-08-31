@@ -161,14 +161,35 @@ describe('ratings', () => {
 
   /* ------------------------------------------------ passenger → operator */
 
-  it('lets a passenger rate the operator that actually carried them', async () => {
+  it('lets a passenger rate a trip that has finished — which they can no longer see', async () => {
+    // The departure is marked completed first, deliberately. A passenger loses
+    // sight of it at that moment (`departures_select_public` is scoped to
+    // `status = 'scheduled'`), and that is exactly when they are asked to rate.
+    // An earlier version of this policy joined `departures` inside itself, so
+    // the EXISTS found nothing and every real rating was refused; the test
+    // passed anyway because it rated a departure that was still scheduled.
+    await test.raw(`update public.departures set status = 'completed' where id = $1`, [
+      corridor.departureId,
+    ]);
+
+    const invisible = await test.asUser(
+      rider,
+      `select id from public.departures where id = $1`,
+      [corridor.departureId],
+    );
+    assert.deepEqual(invisible, [], 'the passenger cannot see the finished departure');
+
     const rows = await test.asUser(
       rider,
       `insert into public.ratings (booking_id, direction, rater_id, operator_id, passenger_id, score, comment)
        values ($1, 'passenger_to_operator', $2, $3, $2, 5, 'On time.') returning id`,
       [bookingId, rider, corridor.operatorId],
     );
-    assert.equal(rows.length, 1);
+    assert.equal(rows.length, 1, 'and can still rate it');
+
+    await test.raw(`update public.departures set status = 'scheduled' where id = $1`, [
+      corridor.departureId,
+    ]);
   });
 
   it('refuses a rating of an operator that did not carry them', async () => {
