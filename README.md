@@ -242,6 +242,7 @@ free themselves whether or not the sweep has run.
 | `npm run db:types` | Regenerate `lib/supabase/database.types.ts` from a live schema. |
 | `node scripts/seed.mjs` | Rebuild the demo data. `--remove` takes it back out. |
 | `node scripts/e2e-loop.mjs` | The whole booking loop against a running app, request through settlement. |
+| `node scripts/operator-loop.mjs` | A brand-new operator from application to a seat on sale, against a running app. |
 | `node scripts/auth-loop.mjs` | Signup and both recovery paths against the live database. |
 | `node scripts/race-test.mjs` | Race the seat lock against the live database. |
 
