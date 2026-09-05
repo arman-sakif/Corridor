@@ -243,6 +243,7 @@ free themselves whether or not the sweep has run.
 | `node scripts/seed.mjs` | Rebuild the demo data. `--remove` takes it back out. |
 | `node scripts/e2e-loop.mjs` | The whole booking loop against a running app, request through settlement. |
 | `node scripts/operator-loop.mjs` | A brand-new operator from application to a seat on sale, against a running app. |
+| `node scripts/incity-loop.mjs` | The in-city local ride: who may book one, who may confirm it, and what cancels it. |
 | `node scripts/auth-loop.mjs` | Signup and both recovery paths against the live database. |
 | `node scripts/race-test.mjs` | Race the seat lock against the live database. |
 
