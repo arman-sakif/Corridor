@@ -5,6 +5,7 @@ import { SiteHeader } from '@/components/site-header';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { requireViewer } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { addDays, formatServiceDateLong, formatTime, todayInToronto } from '@/lib/time';
 
 export const metadata: Metadata = { title: 'Driving' };
@@ -33,24 +34,25 @@ export default async function DriverPage() {
   const supabase = await createClient();
   const today = todayInToronto();
 
-  const { data } = await supabase
-    .from('departure_vehicles')
-    .select(
-      `id, vehicle:vehicles(id, label),
-       departure:departures!inner(id, service_date, departure_time, status,
-         operator:operators(name), route:routes(name))`,
-    )
-    // Theirs, not the whole operator's. `departure_vehicles_select_member`
-    // admits any member, so without this a driver saw every van the business
-    // had out — and opening somebody else's trip showed an empty manifest,
-    // because RLS on `bookings` rightly refused passengers they are not
-    // carrying. It read as "nobody booked" rather than "not your trip".
-    .eq('driver_id', viewer.userId)
-    .gte('departure.service_date', addDays(today, -1))
-    .lte('departure.service_date', addDays(today, 14))
-    .order('service_date', { referencedTable: 'departures' });
-
-  const assignments = (data ?? []) as unknown as Assignment[];
+  const assignments = rows(
+    await supabase
+      .from('departure_vehicles')
+      .select(
+        `id, vehicle:vehicles(id, label),
+         departure:departures!inner(id, service_date, departure_time, status,
+           operator:operators(name), route:routes(name))`,
+      )
+      // Theirs, not the whole operator's. `departure_vehicles_select_member`
+      // admits any member, so without this a driver saw every van the business
+      // had out — and opening somebody else's trip showed an empty manifest,
+      // because RLS on `bookings` rightly refused passengers they are not
+      // carrying. It read as "nobody booked" rather than "not your trip".
+      .eq('driver_id', viewer.userId)
+      .gte('departure.service_date', addDays(today, -1))
+      .lte('departure.service_date', addDays(today, 14))
+      .order('service_date', { referencedTable: 'departures' }),
+    'your trips',
+  ) as unknown as Assignment[];
   const todays = assignments.filter((a) => a.departure?.service_date === today);
   const ahead = assignments.filter((a) => (a.departure?.service_date ?? '') > today);
 

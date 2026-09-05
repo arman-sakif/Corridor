@@ -4,6 +4,7 @@ import { FeedbackForm } from './feedback-form';
 import { requireViewer } from '@/lib/auth/session';
 import { Card, PageHeader } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { formatRelative } from '@/lib/time';
 
 export const metadata: Metadata = { title: 'Tell us something' };
@@ -22,12 +23,15 @@ export default async function FeedbackPage() {
   const viewer = await requireViewer('/feedback');
 
   const supabase = await createClient();
-  const { data: mine } = await supabase
-    .from('feedback')
-    .select('id, kind, message, created_at')
-    .eq('user_id', viewer.userId)
-    .order('created_at', { ascending: false })
-    .limit(20);
+  const mine = rows(
+    await supabase
+      .from('feedback')
+      .select('id, kind, message, created_at')
+      .eq('user_id', viewer.userId)
+      .order('created_at', { ascending: false })
+      .limit(20),
+    'what you have sent',
+  );
 
   return (
     <>
@@ -40,13 +44,13 @@ export default async function FeedbackPage() {
         <FeedbackForm />
       </Card>
 
-      {(mine ?? []).length > 0 ? (
+      {mine.length > 0 ? (
         <div className="mt-8">
           <h2 className="text-sm font-semibold tracking-wide text-ink-500 uppercase">
             What you have sent
           </h2>
           <ul className="mt-3 space-y-2">
-            {(mine ?? []).map((item) => (
+            {mine.map((item) => (
               <li key={item.id}>
                 <Card className="p-4">
                   <p className="text-xs text-ink-500">

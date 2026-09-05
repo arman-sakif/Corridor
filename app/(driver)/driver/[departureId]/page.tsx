@@ -10,6 +10,7 @@ import { completeDeparture, confirmPaymentAsDriver, markNoShow } from '@/lib/boo
 import { Alert, Button, Card, EmptyState, PageHeader } from '@/components/ui';
 import { requireViewer } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { one, rows } from '@/lib/supabase/rows';
 import { formatCents } from '@/lib/money';
 import { formatServiceDateLong, formatTime, torontoInstant } from '@/lib/time';
 import type { BookingStatus } from '@/lib/supabase/database.types';
@@ -47,23 +48,29 @@ export default async function DriverManifestPage({
 
   const supabase = await createClient();
 
-  const { data: departure } = await supabase
-    .from('departures')
-    .select(
-      `id, service_date, departure_time, status,
-       operator:operators(id, name), route:routes(name)`,
-    )
-    .eq('id', departureId)
-    .maybeSingle();
+  const departure = one(
+    await supabase
+      .from('departures')
+      .select(
+        `id, service_date, departure_time, status,
+         operator:operators(id, name), route:routes(name)`,
+      )
+      .eq('id', departureId)
+      .maybeSingle(),
+    'the trip',
+  );
 
   if (!departure) notFound();
 
-  const { data: assignments } = await supabase
-    .from('departure_vehicles')
-    .select('vehicle:vehicles(id, label), driver_id')
-    .eq('departure_id', departureId);
+  const assignments = rows(
+    await supabase
+      .from('departure_vehicles')
+      .select('vehicle:vehicles(id, label), driver_id')
+      .eq('departure_id', departureId),
+    'the vehicles on this trip',
+  );
 
-  const mine = (assignments ?? []).find((a) => a.driver_id === viewer.userId);
+  const mine = assignments.find((a) => a.driver_id === viewer.userId);
 
   // Not their trip. RLS already refuses the passengers, so the page was safe —
   // but it rendered "Nobody in this vehicle yet", which reads as an empty van
@@ -87,8 +94,7 @@ export default async function DriverManifestPage({
 
   if (vehicleId) query_ = query_.eq('assigned_vehicle_id', vehicleId);
 
-  const { data } = await query_;
-  const riders = (data ?? []) as unknown as Rider[];
+  const riders = rows(await query_, 'the passenger list') as unknown as Rider[];
 
   const hasLeft = torontoInstant(departure.service_date, departure.departure_time) <= new Date();
   const totalSeats = riders.reduce((sum, rider) => sum + rider.seats, 0);

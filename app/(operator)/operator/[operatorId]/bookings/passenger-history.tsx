@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 
 /**
  * The passenger's record across the whole platform, as counts.
@@ -11,9 +12,10 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function PassengerHistory({ passengerId }: { passengerId: string }) {
   const supabase = await createClient();
-  const { data } = await supabase.rpc('passenger_history', { p_passenger_id: passengerId });
-
-  const history = data?.[0];
+  const history = rows(
+    await supabase.rpc('passenger_history', { p_passenger_id: passengerId }),
+    "this passenger's history",
+  )[0];
   if (!history) return null;
 
   const isNew =

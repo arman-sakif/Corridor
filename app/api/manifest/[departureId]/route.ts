@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { manifestCsv, manifestFilename, type ManifestRow } from '@/lib/booking/manifest';
 import { createClient } from '@/lib/supabase/server';
+import { one, rows } from '@/lib/supabase/rows';
 
 /**
  * One CSV per vehicle per departure.
@@ -25,26 +26,32 @@ export async function GET(
 
   if (!user) return new NextResponse('Not found', { status: 404 });
 
-  const { data: departure } = await supabase
-    .from('departures')
-    .select(
-      `id, service_date, departure_time,
-       operator:operators(name),
-       route:routes(name)`,
-    )
-    .eq('id', departureId)
-    .maybeSingle();
+  const departure = one(
+    await supabase
+      .from('departures')
+      .select(
+        `id, service_date, departure_time,
+         operator:operators(name),
+         route:routes(name)`,
+      )
+      .eq('id', departureId)
+      .maybeSingle(),
+    'the departure',
+  );
 
   if (!departure) return new NextResponse('Not found', { status: 404 });
 
-  const { data: assignment } = vehicleId
-    ? await supabase
-        .from('departure_vehicles')
-        .select('vehicle:vehicles(id, label), driver:profiles(full_name)')
-        .eq('departure_id', departureId)
-        .eq('vehicle_id', vehicleId)
-        .maybeSingle()
-    : { data: null };
+  const assignment = vehicleId
+    ? one(
+        await supabase
+          .from('departure_vehicles')
+          .select('vehicle:vehicles(id, label), driver:profiles(full_name)')
+          .eq('departure_id', departureId)
+          .eq('vehicle_id', vehicleId)
+          .maybeSingle(),
+        'the vehicle on this departure',
+      )
+    : null;
 
   if (vehicleId && !assignment) return new NextResponse('Not found', { status: 404 });
 
@@ -64,10 +71,9 @@ export async function GET(
   // split it across vans.
   query = vehicleId ? query.eq('assigned_vehicle_id', vehicleId) : query;
 
-  const { data: bookings, error } = await query;
-  if (error) return new NextResponse('Not found', { status: 404 });
-
-  const rows: ManifestRow[] = (bookings ?? []).map((booking) => ({
+  // A refused query used to leave here as a 404, which reads as "no such
+  // departure" — the one thing it is not. Fail loudly instead.
+  const manifest: ManifestRow[] = rows(await query, 'the passenger list').map((booking) => ({
     from_stop: booking.from_stop?.label ?? '',
     to_stop: booking.to_stop?.label ?? '',
     passenger_name: booking.passenger?.full_name ?? 'Passenger',
@@ -92,7 +98,7 @@ export async function GET(
     departureTime: departure.departure_time,
     vehicleLabel,
     driverName: assignment?.driver?.full_name ?? null,
-    rows,
+    rows: manifest,
   });
 
   return new NextResponse(csv, {

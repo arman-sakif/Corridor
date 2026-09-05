@@ -3,6 +3,7 @@ import 'server-only';
 import { Resend } from 'resend';
 
 import { createAdminClient } from '@/lib/supabase/admin';
+import { rows } from '@/lib/supabase/rows';
 import type { NotificationKind as StoredNotificationKind } from '@/lib/supabase/database.types';
 import { siteUrl } from '@/lib/supabase/env';
 
@@ -120,13 +121,19 @@ async function resolveRecipients(notification: Notification): Promise<Recipient[
   }
 
   if (notification.operatorId) {
-    const { data: members } = await admin
-      .from('operator_members')
-      .select('user_id, role')
-      .eq('operator_id', notification.operatorId)
-      .in('role', ['owner', 'staff']);
+    // Unwrapped, not defaulted: a refused lookup here would notify nobody and
+    // look exactly like an operator with no staff. notify()'s own catch turns
+    // the throw into a log without touching the caller's work.
+    const members = rows(
+      await admin
+        .from('operator_members')
+        .select('user_id, role')
+        .eq('operator_id', notification.operatorId)
+        .in('role', ['owner', 'staff']),
+      "the operator's team",
+    );
 
-    return withEmails(members?.map((member) => member.user_id) ?? []);
+    return withEmails(members.map((member) => member.user_id));
   }
 
   if (notification.platformAdmins) {
@@ -134,12 +141,12 @@ async function resolveRecipients(notification: Notification): Promise<Recipient[
     // column on profiles with a partial index and no helper. This is that
     // helper, and it stays here rather than in a query module because the
     // service-role key is what makes reading other people's rows legitimate.
-    const { data: admins } = await admin
-      .from('profiles')
-      .select('id')
-      .eq('platform_role', 'admin');
+    const admins = rows(
+      await admin.from('profiles').select('id').eq('platform_role', 'admin'),
+      'the platform admins',
+    );
 
-    return withEmails(admins?.map((row) => row.id) ?? []);
+    return withEmails(admins.map((row) => row.id));
   }
 
   return [];
@@ -164,7 +171,7 @@ async function withEmails(userIds: string[]): Promise<Recipient[]> {
 async function file(recipients: Recipient[], notification: Notification): Promise<void> {
   if (CREDENTIAL_KINDS.includes(notification.kind)) return;
 
-  const rows = recipients
+  const entries = recipients
     .filter((recipient) => recipient.userId)
     .map((recipient) => ({
       user_id: recipient.userId!,
@@ -175,9 +182,9 @@ async function file(recipients: Recipient[], notification: Notification): Promis
       booking_id: notification.bookingId ?? null,
     }));
 
-  if (rows.length === 0) return;
+  if (entries.length === 0) return;
 
-  const { error } = await createAdminClient().from('notifications').insert(rows);
+  const { error } = await createAdminClient().from('notifications').insert(entries);
 
   // Logged, never thrown: an approval that went through and a notification
   // that did not is still an approval that went through.

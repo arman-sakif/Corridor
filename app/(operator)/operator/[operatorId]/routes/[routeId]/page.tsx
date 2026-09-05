@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { FareGrid } from './fare-grid';
 import { Alert, Card, CardHeader, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { one, rows } from '@/lib/supabase/rows';
 import { formatCents } from '@/lib/money';
 import { formatInstant } from '@/lib/time';
 import { segmentBaseCents } from '@/lib/booking/fares';
@@ -16,18 +17,21 @@ export default async function RouteFaresPage({
   const { operatorId, routeId } = await params;
   const supabase = await createClient();
 
-  const { data: route } = await supabase
-    .from('routes')
-    .select(
-      'id, name, pricing_mode, operator_id, route_stops(seq, stop:stops(label, city:cities(name)))',
-    )
-    .eq('id', routeId)
-    .eq('operator_id', operatorId)
-    .maybeSingle();
+  const route = one(
+    await supabase
+      .from('routes')
+      .select(
+        'id, name, pricing_mode, operator_id, route_stops(seq, stop:stops(label, city:cities(name)))',
+      )
+      .eq('id', routeId)
+      .eq('operator_id', operatorId)
+      .maybeSingle(),
+    'the route',
+  );
 
   if (!route) notFound();
 
-  const [{ data: fares }, { data: changes }] = await Promise.all([
+  const [fareResult, changeResult] = await Promise.all([
     supabase.from('fares').select('from_seq, to_seq, price_cents').eq('route_id', routeId),
     supabase
       .from('fare_changes')
@@ -45,7 +49,8 @@ export default async function RouteFaresPage({
       city: rs.stop?.city?.name ?? '',
     }));
 
-  const fareRows = fares ?? [];
+  const fareRows = rows(fareResult, 'the fares');
+  const changes = rows(changeResult, 'the price history');
   const additive = route.pricing_mode === 'additive';
 
   return (
@@ -141,7 +146,7 @@ export default async function RouteFaresPage({
           title="Price history"
           description="Every change is kept, with the reason you gave."
         />
-        {(changes ?? []).length === 0 ? (
+        {changes.length === 0 ? (
           <p className="px-5 py-4 text-sm text-ink-500">No price changes recorded yet.</p>
         ) : (
           <Table>
@@ -155,7 +160,7 @@ export default async function RouteFaresPage({
               </tr>
             </thead>
             <tbody>
-              {(changes ?? []).map((change, index) => (
+              {changes.map((change, index) => (
                 <tr key={index}>
                   <Td className="numeric whitespace-nowrap">
                     {stops.find((s) => s.seq === change.from_seq)?.city ?? change.from_seq} →{' '}

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { setOperatorStatus } from '../../actions';
 import { Badge, Button, Card, CardHeader, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { count, one, rows } from '@/lib/supabase/rows';
 import { formatInstant } from '@/lib/time';
 import type { OperatorStatus } from '@/lib/supabase/database.types';
 
@@ -29,15 +30,18 @@ export default async function AdminOperatorPage({
   const { operatorId } = await params;
   const supabase = await createClient();
 
-  const { data: operator } = await supabase
-    .from('operators')
-    .select('id, name, type, bio, public_phone, status, created_at')
-    .eq('id', operatorId)
-    .maybeSingle();
+  const operator = one(
+    await supabase
+      .from('operators')
+      .select('id, name, type, bio, public_phone, status, created_at')
+      .eq('id', operatorId)
+      .maybeSingle(),
+    'the operator',
+  );
 
   if (!operator) notFound();
 
-  const [{ data: members }, { count: routeCount }, { count: departureCount }] = await Promise.all([
+  const [memberResult, routeResult, departureResult] = await Promise.all([
     supabase
       .from('operator_members')
       .select('role, created_at, profile:profiles(full_name, phone)')
@@ -52,7 +56,9 @@ export default async function AdminOperatorPage({
       .eq('operator_id', operatorId),
   ]);
 
-  const team = (members ?? []) as unknown as Member[];
+  const team = rows(memberResult, 'the team') as unknown as Member[];
+  const routeCount = count(routeResult, 'their routes');
+  const departureCount = count(departureResult, 'their departures');
 
   return (
     <>
@@ -95,11 +101,11 @@ export default async function AdminOperatorPage({
             </div>
             <div className="flex gap-4 px-5 py-3">
               <dt className="w-32 shrink-0 text-ink-500">Routes</dt>
-              <dd className="numeric text-ink-900">{routeCount ?? 0}</dd>
+              <dd className="numeric text-ink-900">{routeCount}</dd>
             </div>
             <div className="flex gap-4 px-5 py-3">
               <dt className="w-32 shrink-0 text-ink-500">Departures</dt>
-              <dd className="numeric text-ink-900">{departureCount ?? 0}</dd>
+              <dd className="numeric text-ink-900">{departureCount}</dd>
             </div>
           </dl>
         </Card>

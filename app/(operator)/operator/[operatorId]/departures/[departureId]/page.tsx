@@ -13,6 +13,7 @@ import {
 } from '@/lib/booking/day-actions';
 import { Alert, Badge, Button, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { one, rows } from '@/lib/supabase/rows';
 import { formatCents } from '@/lib/money';
 import { formatServiceDateLong, formatTime, torontoInstant } from '@/lib/time';
 import { legLoads, type CapacityBooking } from '@/lib/booking/capacity';
@@ -46,20 +47,22 @@ export default async function DepartureDayPage({
   const { operatorId, departureId } = await params;
   const supabase = await createClient();
 
-  const { data: departure } = await supabase
-    .from('departures')
-    .select(
-      `id, service_date, departure_time, max_seats, status,
-       route:routes(id, name, route_stops(seq, stop:stops(label)))`,
-    )
-    .eq('id', departureId)
-    .eq('operator_id', operatorId)
-    .maybeSingle();
+  const departure = one(
+    await supabase
+      .from('departures')
+      .select(
+        `id, service_date, departure_time, max_seats, status,
+         route:routes(id, name, route_stops(seq, stop:stops(label)))`,
+      )
+      .eq('id', departureId)
+      .eq('operator_id', operatorId)
+      .maybeSingle(),
+    'the departure',
+  );
 
   if (!departure) notFound();
 
-  const [{ data: bookingRows }, { data: assignments }, { data: fleet }, { data: team }] =
-    await Promise.all([
+  const [bookingResult, assignmentResult, fleetResult, teamResult] = await Promise.all([
       supabase
         .from('bookings')
         .select(
@@ -88,8 +91,9 @@ export default async function DepartureDayPage({
         .eq('operator_id', operatorId),
     ]);
 
-  const passengers = (bookingRows ?? []) as unknown as Passenger[];
-  const vans = (assignments ?? []) as unknown as {
+  const passengers = rows(bookingResult, 'the passengers') as unknown as Passenger[];
+  const fleet = rows(fleetResult, 'your vehicles');
+  const vans = rows(assignmentResult, 'the vehicles on this departure') as unknown as {
     id: string;
     vehicle: { id: string; label: string; seat_count: number } | null;
     driver: { id: string; full_name: string | null } | null;
@@ -104,7 +108,7 @@ export default async function DepartureDayPage({
   const hasLeft = torontoInstant(departure.service_date, departure.departure_time) <= new Date();
   const unassigned = riding.filter((p) => !p.assigned_vehicle_id);
 
-  const drivers = (team ?? [])
+  const drivers = rows(teamResult, 'your team')
     // The same list the /driver guard admits — see DRIVING_ROLES. Assigning
     // someone the guard turns away would hand them a manifest they cannot open.
     .filter((member) => DRIVING_ROLES.includes(member.role))
@@ -331,7 +335,7 @@ export default async function DepartureDayPage({
 
               <AddVehicleForm
                 departureId={departureId}
-                vehicles={(fleet ?? []).filter(
+                vehicles={fleet.filter(
                   (vehicle) => !vans.some((van) => van.vehicle?.id === vehicle.id),
                 )}
                 drivers={drivers}

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Card, EmptyState, PageHeader } from '@/components/ui';
 import { IconArrowRight, IconCheck, IconRoute, IconSeat, IconVan } from '@/components/icons';
 import { createClient } from '@/lib/supabase/server';
+import { count } from '@/lib/supabase/rows';
 import { dynamicRoute } from '@/lib/routes';
 import { todayInToronto } from '@/lib/time';
 
@@ -19,7 +20,8 @@ export default async function OperatorOverviewPage({
   const supabase = await createClient();
   const today = todayInToronto();
 
-  const [stops, routes, schedules, vehicles, departures, pending] = await Promise.all([
+  const [stopResult, routeResult, scheduleResult, vehicleResult, departureResult, pendingResult] =
+    await Promise.all([
     supabase.from('stops').select('id', { count: 'exact', head: true }).eq('operator_id', operatorId),
     supabase.from('routes').select('id', { count: 'exact', head: true }).eq('operator_id', operatorId),
     supabase
@@ -42,33 +44,40 @@ export default async function OperatorOverviewPage({
       .eq('status', 'held'),
   ]);
 
+  const stops = count(stopResult, 'your stops');
+  const routes = count(routeResult, 'your routes');
+  const schedules = count(scheduleResult, 'your timetable');
+  const vehicles = count(vehicleResult, 'your vehicles');
+  const departures = count(departureResult, 'your departures');
+  const pending = count(pendingResult, 'the seat requests waiting on you');
+
   const steps = [
     {
       href: `/operator/${operatorId}/stops`,
       label: 'Name your pickup points',
-      done: (stops.count ?? 0) >= 2,
-      detail: `${stops.count ?? 0} stop${stops.count === 1 ? '' : 's'}`,
+      done: stops >= 2,
+      detail: `${stops} stop${stops === 1 ? '' : 's'}`,
       help: 'A stop is where the van actually waits — "Yorkdale Mall, by the Shoppers entrance".',
     },
     {
       href: `/operator/${operatorId}/routes`,
       label: 'Build a route and price it',
-      done: (routes.count ?? 0) >= 1,
-      detail: `${routes.count ?? 0} route${routes.count === 1 ? '' : 's'}`,
+      done: routes >= 1,
+      detail: `${routes} route${routes === 1 ? '' : 's'}`,
       help: 'Put your stops in the order you drive them, then set a price for each pair.',
     },
     {
       href: `/operator/${operatorId}/schedules`,
       label: 'Put it on a timetable',
-      done: (schedules.count ?? 0) >= 1,
-      detail: `${schedules.count ?? 0} timetable entr${schedules.count === 1 ? 'y' : 'ies'}`,
+      done: schedules >= 1,
+      detail: `${schedules} timetable entr${schedules === 1 ? 'y' : 'ies'}`,
       help: 'Departure time, which days it runs, and how many seats.',
     },
     {
       href: `/operator/${operatorId}/fleet`,
       label: 'Add your vehicles',
-      done: (vehicles.count ?? 0) >= 1,
-      detail: `${vehicles.count ?? 0} vehicle${vehicles.count === 1 ? '' : 's'}`,
+      done: vehicles >= 1,
+      detail: `${vehicles} vehicle${vehicles === 1 ? '' : 's'}`,
       help: 'Needed on the day, to split a busy departure across two vans.',
     },
   ];
@@ -80,20 +89,20 @@ export default async function OperatorOverviewPage({
       <div className="mb-8 grid gap-4 sm:grid-cols-3">
         <Stat
           label="Seat requests waiting"
-          value={pending.count ?? 0}
+          value={pending}
           href={`/operator/${operatorId}/bookings`}
           icon={<IconSeat />}
-          urgent={(pending.count ?? 0) > 0}
+          urgent={pending > 0}
         />
         <Stat
           label="Departures on sale"
-          value={departures.count ?? 0}
+          value={departures}
           href={`/operator/${operatorId}/departures`}
           icon={<IconVan />}
         />
         <Stat
           label="Routes"
-          value={routes.count ?? 0}
+          value={routes}
           href={`/operator/${operatorId}/routes`}
           icon={<IconRoute />}
         />

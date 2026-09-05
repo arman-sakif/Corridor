@@ -2,6 +2,7 @@ import { VehicleForm } from './vehicle-form';
 import { setVehicleActive } from '@/lib/operator/setup';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 
 export default async function FleetPage({
   params,
@@ -11,13 +12,14 @@ export default async function FleetPage({
   const { operatorId } = await params;
   const supabase = await createClient();
 
-  const { data: vehicles } = await supabase
-    .from('vehicles')
-    .select('id, label, seat_count, is_active')
-    .eq('operator_id', operatorId)
-    .order('label');
-
-  const rows = vehicles ?? [];
+  const vehicles = rows(
+    await supabase
+      .from('vehicles')
+      .select('id, label, seat_count, is_active')
+      .eq('operator_id', operatorId)
+      .order('label'),
+    'your vehicles',
+  );
 
   return (
     <>
@@ -37,7 +39,7 @@ export default async function FleetPage({
 
         <Card>
           <CardHeader title="Your vehicles" />
-          {rows.length === 0 ? (
+          {vehicles.length === 0 ? (
             <div className="p-5">
               <EmptyState title="No vehicles yet">
                 You need at least one before you can hand a driver a passenger list.
@@ -54,7 +56,7 @@ export default async function FleetPage({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((vehicle) => (
+                {vehicles.map((vehicle) => (
                   <tr key={vehicle.id}>
                     <Td className="font-medium text-ink-900">{vehicle.label}</Td>
                     <Td className="numeric">{vehicle.seat_count}</Td>

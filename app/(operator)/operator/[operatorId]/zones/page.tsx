@@ -6,6 +6,7 @@ import { requireOperatorRole } from '@/lib/auth/session';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { IconPin } from '@/components/icons';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { formatCents } from '@/lib/money';
 
 /**
@@ -28,13 +29,14 @@ export default async function ZonesPage({
   if (membership.operator?.type !== 'incity') notFound();
 
   const supabase = await createClient();
-  const { data: zones } = await supabase
-    .from('incity_zones')
-    .select('id, name, flat_price_cents, is_active')
-    .eq('operator_id', operatorId)
-    .order('flat_price_cents');
-
-  const rows = zones ?? [];
+  const zones = rows(
+    await supabase
+      .from('incity_zones')
+      .select('id, name, flat_price_cents, is_active')
+      .eq('operator_id', operatorId)
+      .order('flat_price_cents'),
+    'your zones',
+  );
 
   return (
     <>
@@ -56,7 +58,7 @@ export default async function ZonesPage({
         <Card>
           <CardHeader title="Where you go" />
 
-          {rows.length === 0 ? (
+          {zones.length === 0 ? (
             <div className="p-5">
               <EmptyState icon={<IconPin />} title="No areas yet">
                 Add the parts of town you drive to. Passengers cannot book a local ride until at
@@ -74,7 +76,7 @@ export default async function ZonesPage({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((zone) => (
+                {zones.map((zone) => (
                   <tr key={zone.id}>
                     <Td className="font-medium text-ink-900">{zone.name}</Td>
                     <Td className="numeric">{formatCents(zone.flat_price_cents)}</Td>

@@ -4,6 +4,7 @@ import { SearchForm } from '@/components/search-form';
 import { Card } from '@/components/ui';
 import { IconArrowRight, IconRoute, IconSeat, IconWallet } from '@/components/icons';
 import { createClient } from '@/lib/supabase/server';
+import { count, rows } from '@/lib/supabase/rows';
 import { todayInToronto } from '@/lib/time';
 
 /**
@@ -18,10 +19,13 @@ export default async function HomePage({
 }) {
   const [params, supabase] = await Promise.all([searchParams, createClient()]);
 
-  const [{ data: cities }, { count: operatorCount }] = await Promise.all([
+  const [cityResult, operatorResult] = await Promise.all([
     supabase.from('cities').select('id, name').eq('is_active', true).order('name'),
     supabase.from('operators').select('id', { count: 'exact', head: true }),
   ]);
+
+  const cities = rows(cityResult, 'the city list');
+  const operatorCount = count(operatorResult, 'the operator count');
 
   return (
     <>
@@ -48,7 +52,7 @@ export default async function HomePage({
 
           <div className="mt-7">
             <SearchForm
-              cities={cities ?? []}
+              cities={cities}
               defaults={{
                 from: params.from ?? '',
                 to: params.to ?? '',

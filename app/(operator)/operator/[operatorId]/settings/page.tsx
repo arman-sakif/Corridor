@@ -5,6 +5,7 @@ import { SurchargeForm } from './surcharge-form';
 import { requireOperatorRole } from '@/lib/auth/session';
 import { Alert, Card, PageHeader } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { one } from '@/lib/supabase/rows';
 
 export default async function OperatorSettingsPage({
   params,
@@ -15,13 +16,16 @@ export default async function OperatorSettingsPage({
   const { membership } = await requireOperatorRole(operatorId);
 
   const supabase = await createClient();
-  const { data: operator } = await supabase
-    .from('operators')
-    .select(
-      'id, name, bio, public_phone, status, type, free_luggage_per_seat, extra_luggage_cents, airport_fee_cents',
-    )
-    .eq('id', operatorId)
-    .maybeSingle();
+  const operator = one(
+    await supabase
+      .from('operators')
+      .select(
+        'id, name, bio, public_phone, status, type, free_luggage_per_seat, extra_luggage_cents, airport_fee_cents',
+      )
+      .eq('id', operatorId)
+      .maybeSingle(),
+    'your business details',
+  );
 
   if (!operator) notFound();
 
