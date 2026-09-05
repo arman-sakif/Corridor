@@ -501,6 +501,9 @@ async function seedAll() {
   /* ---- who drives what ------------------------------------------------- */
   await seedVehicleAssignments(fleetByOperator);
 
+  /* ---- the last few kilometres ----------------------------------------- */
+  await seedLocalRides(incityOp.id);
+
   console.log(`\nSummary`);
   console.log(`  cities      ${CITIES.length}`);
   console.log(`  operators   ${OPERATORS.length + 1}`);
@@ -979,6 +982,28 @@ const COMPLAINTS = [
   },
 ];
 
+/**
+ * The local rides to write: status, which kind of seat it hangs off, and where
+ * the passenger is going. Addresses, not zones — the zone is the price, the
+ * address is what the driver actually needs.
+ *
+ * The middle column is the part that matters. A ride still waiting on a
+ * decision has to hang off a seat that is confirmed and a bus that has not
+ * left, or the operator's Requests page shows them being asked to drive
+ * somebody whose trip finished last week. The first version of this seeded
+ * every ride onto whichever booking came back first, which was a past one, and
+ * that is exactly what it looked like.
+ */
+const LOCAL_RIDES = [
+  ['held', 'ahead', '412 Sherbourne Street, buzzer 12'],
+  ['held', 'ahead', '88 Yonge Street, the side entrance'],
+  ['held', 'ahead', '15 Rean Drive, visitor parking'],
+  ['approved', 'ahead', '3050 Yonge Street, apartment 704'],
+  ['approved', 'ahead', '210 Queens Quay West, by the lobby'],
+  ['completed', 'past', '77 Ellesmere Road'],
+  ['declined', 'past', '9 Rossford Road'],
+];
+
 const REVIEWS = [
   'Left on time and the driver was helpful with bags.',
   'Comfortable van, good communication the day before.',
@@ -986,6 +1011,105 @@ const REVIEWS = [
   'Driver called ahead to confirm the pickup point.',
   'Ran a little late leaving but made it up on the 401.',
 ];
+
+/**
+ * The in-city add-on, with something actually on it.
+ *
+ * `incity_bookings` had no rows in any environment, so an in-city operator's
+ * Requests page was an empty state in every screenshot ever taken of it, and
+ * the passenger's onward page had only ever been seen offering a ride, never
+ * showing one. That is the same shape as the complaints bug: a screen nobody
+ * has seen populated is a screen nobody has really seen.
+ *
+ * Three invariants, because seed data that breaks one makes the bug it hides
+ * impossible to find:
+ *
+ * - **The price comes from the zone.** `request_incity_ride()` reads it there
+ *   and never takes it from the caller; a seeded row that disagrees would make
+ *   the screens lie about a rule that holds.
+ * - **The pickup point is in the city the passenger is arriving in.** The
+ *   function refuses anything else outright, so a row that broke it could not
+ *   have been created by the app.
+ * - **One ride to a booking**, which the unique index enforces anyway, and
+ *   only on a booking whose seat was confirmed — a local ride hanging off a
+ *   lapsed hold is a state the product cannot reach.
+ */
+async function seedLocalRides(incityOperatorId) {
+  const { data: pickups } = await db
+    .from('stops')
+    .select('id, city_id, label')
+    .eq('operator_id', incityOperatorId)
+    .eq('is_active', true);
+
+  const { data: zones } = await db
+    .from('incity_zones')
+    .select('id, name, flat_price_cents')
+    .eq('operator_id', incityOperatorId)
+    .eq('is_active', true)
+    .order('flat_price_cents');
+
+  if (!pickups?.length || !zones?.length) {
+    console.log('No in-city pickup points or zones, so no local rides.');
+    return;
+  }
+
+  const servedCities = new Set(pickups.map((pickup) => pickup.city_id));
+
+  // Only seats that were confirmed. `to_stop` carries the city, which is what
+  // the match is made on — there is no geography anywhere in this product.
+  const { data: candidates, error: candidateError } = await db
+    .from('bookings')
+    .select(
+      'id, status, to_stop:stops!bookings_to_stop_id_fkey(city_id), departure:departures(service_date)',
+    )
+    .in('status', ['approved', 'completed', 'settled'])
+    .limit(1000);
+  if (candidateError) die('Could not read bookings for local rides', candidateError);
+
+  const serviceToday = todayInToronto();
+  const arriving = (candidates ?? []).filter((booking) =>
+    servedCities.has(booking.to_stop?.city_id),
+  );
+
+  const pool = {
+    // A live request needs a confirmed seat on a bus that has not left.
+    ahead: arriving.filter(
+      (b) => b.status === 'approved' && (b.departure?.service_date ?? '') >= serviceToday,
+    ),
+    // A finished or refused one belongs on a trip that has already run.
+    past: arriving.filter((b) => b.status === 'completed' || b.status === 'settled'),
+  };
+
+  const rides = [];
+  for (const [status, when, address] of LOCAL_RIDES) {
+    const booking = pool[when].shift();
+    if (!booking) continue;
+
+    const pickup = pickups.find((p) => p.city_id === booking.to_stop.city_id);
+    const zone = zones[rides.length % zones.length];
+
+    rides.push({
+      booking_id: booking.id,
+      operator_id: incityOperatorId,
+      pickup_stop_id: pickup.id,
+      zone_id: zone.id,
+      destination_address: address,
+      price_cents: zone.flat_price_cents,
+      status,
+    });
+  }
+
+  if (rides.length === 0) {
+    console.log('No confirmed bookings arrive where the in-city operator picks up.');
+    return;
+  }
+
+  const { error } = await db.from('incity_bookings').insert(rides);
+  if (error) die('Could not create the local rides', error);
+
+  const waiting = rides.filter((ride) => ride.status === 'held').length;
+  console.log(`${rides.length} local rides, ${waiting} of them waiting on a decision.`);
+}
 
 /* ------------------------------------------------------------------- main */
 
