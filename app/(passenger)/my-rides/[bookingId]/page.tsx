@@ -11,6 +11,7 @@ import { Alert, Button, ButtonLink, Card, PageHeader } from '@/components/ui';
 import { requireViewer } from '@/lib/auth/session';
 import { reportsForBooking } from '@/lib/reports/queries';
 import { createClient } from '@/lib/supabase/server';
+import { one } from '@/lib/supabase/rows';
 import { dynamicRoute } from '@/lib/routes';
 import { formatCents } from '@/lib/money';
 import { formatRelative, formatServiceDateLong, formatTime } from '@/lib/time';
@@ -53,22 +54,23 @@ export default async function RideDetailPage({
   const viewer = await requireViewer('/my-rides');
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from('bookings')
-    .select(
-      `id, seats, luggage_count, status, hold_expires_at,
-       base_cents, luggage_cents, airport_cents, total_cents, passenger_note,
-       payment_method, passenger_confirmed_at, driver_confirmed_at,
-       from_stop:stops!bookings_from_stop_id_fkey(label, description, city:cities(name)),
-       to_stop:stops!bookings_to_stop_id_fkey(label, description, city:cities(name)),
-       departure:departures(id, service_date, departure_time,
-         operator:operators(id, name, public_phone))`,
-    )
-    .eq('id', bookingId)
-    .eq('passenger_id', viewer.userId)
-    .maybeSingle();
-
-  const booking = data as unknown as Booking | null;
+  const booking = one(
+    await supabase
+      .from('bookings')
+      .select(
+        `id, seats, luggage_count, status, hold_expires_at,
+         base_cents, luggage_cents, airport_cents, total_cents, passenger_note,
+         payment_method, passenger_confirmed_at, driver_confirmed_at,
+         from_stop:stops!bookings_from_stop_id_fkey(label, description, city:cities(name)),
+         to_stop:stops!bookings_to_stop_id_fkey(label, description, city:cities(name)),
+         departure:departures(id, service_date, departure_time,
+           operator:operators(id, name, public_phone))`,
+      )
+      .eq('id', bookingId)
+      .eq('passenger_id', viewer.userId)
+      .maybeSingle(),
+    'your booking',
+  ) as unknown as Booking | null;
   if (!booking) notFound();
 
   const cancellable = booking.status === 'held' || booking.status === 'approved';

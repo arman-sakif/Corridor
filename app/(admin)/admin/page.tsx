@@ -5,6 +5,7 @@ import { setOperatorStatus } from './actions';
 import { Badge, Button, Card, CardHeader, EmptyState, Table, Td, Th } from '@/components/ui';
 import { PageHeader } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { formatInstant } from '@/lib/time';
 import type { OperatorStatus } from '@/lib/supabase/database.types';
 
@@ -19,14 +20,15 @@ const statusTone: Record<OperatorStatus, 'warn' | 'good' | 'bad'> = {
 export default async function AdminOperatorsPage() {
   const supabase = await createClient();
 
-  const { data: operators } = await supabase
-    .from('operators')
-    .select('id, name, type, public_phone, status, created_at, bio')
-    .order('created_at', { ascending: false });
-
-  const rows = operators ?? [];
-  const pending = rows.filter((o) => o.status === 'pending');
-  const rest = rows.filter((o) => o.status !== 'pending');
+  const operators = rows(
+    await supabase
+      .from('operators')
+      .select('id, name, type, public_phone, status, created_at, bio')
+      .order('created_at', { ascending: false }),
+    'the operator list',
+  );
+  const pending = operators.filter((o) => o.status === 'pending');
+  const rest = operators.filter((o) => o.status !== 'pending');
 
   return (
     <>

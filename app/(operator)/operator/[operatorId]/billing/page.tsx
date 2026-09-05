@@ -2,6 +2,7 @@ import { requireOperatorRole } from '@/lib/auth/session';
 import { Alert, Badge, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { IconWallet } from '@/components/icons';
 import { createClient } from '@/lib/supabase/server';
+import { one, rows } from '@/lib/supabase/rows';
 import { formatCents } from '@/lib/money';
 import { formatServiceDate } from '@/lib/time';
 import type { SubscriptionStatus } from '@/lib/supabase/database.types';
@@ -33,7 +34,7 @@ export default async function BillingPage({
   await requireOperatorRole(operatorId);
 
   const supabase = await createClient();
-  const [{ data: subscription }, { data: payments }] = await Promise.all([
+  const [subscriptionResult, paymentResult] = await Promise.all([
     supabase
       .from('subscriptions')
       .select('plan, status, amount_cents, current_period_end')
@@ -49,7 +50,8 @@ export default async function BillingPage({
       .limit(50),
   ]);
 
-  const history = payments ?? [];
+  const subscription = one(subscriptionResult, 'the subscription');
+  const history = rows(paymentResult, 'the payments');
 
   return (
     <>

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
+import { one, rows } from '@/lib/supabase/rows';
 import type { IncityBookingStatus } from '@/lib/supabase/database.types';
 
 /**
@@ -45,7 +46,7 @@ export async function offersFor(dropCityId: string): Promise<IncityOffer[]> {
 
   // Two reads rather than one nested select: the join is operator→stops and
   // operator→zones, which PostgREST would return as a cross product.
-  const { data: stops } = await supabase
+  const stopResult = await supabase
     .from('stops')
     .select('id, label, description, operator:operators!inner(id, name, type, status, public_phone)')
     .eq('city_id', dropCityId)
@@ -61,21 +62,24 @@ export async function offersFor(dropCityId: string): Promise<IncityOffer[]> {
     operator: { id: string; name: string; public_phone: string | null } | null;
   };
 
-  const rows = (stops ?? []) as unknown as StopRow[];
-  if (rows.length === 0) return [];
+  const stops = rows(stopResult, 'the local operators there') as unknown as StopRow[];
+  if (stops.length === 0) return [];
 
-  const operatorIds = [...new Set(rows.map((row) => row.operator?.id).filter(Boolean))] as string[];
+  const operatorIds = [...new Set(stops.map((row) => row.operator?.id).filter(Boolean))] as string[];
 
-  const { data: zones } = await supabase
-    .from('incity_zones')
-    .select('id, name, flat_price_cents, operator_id')
-    .in('operator_id', operatorIds)
-    .eq('is_active', true)
-    .order('flat_price_cents');
+  const zones = rows(
+    await supabase
+      .from('incity_zones')
+      .select('id, name, flat_price_cents, operator_id')
+      .in('operator_id', operatorIds)
+      .eq('is_active', true)
+      .order('flat_price_cents'),
+    'their zones',
+  );
 
   const byOperator = new Map<string, IncityOffer>();
 
-  for (const row of rows) {
+  for (const row of stops) {
     const operator = row.operator;
     if (!operator) continue;
 
@@ -91,7 +95,7 @@ export async function offersFor(dropCityId: string): Promise<IncityOffer[]> {
     byOperator.set(operator.id, existing);
   }
 
-  for (const zone of zones ?? []) {
+  for (const zone of zones) {
     const offer = byOperator.get(zone.operator_id);
     if (offer) {
       offer.zones.push({
@@ -110,18 +114,21 @@ export async function offersFor(dropCityId: string): Promise<IncityOffer[]> {
 export async function rideFor(bookingId: string): Promise<IncityRide | null> {
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from('incity_bookings')
-    .select(
-      `id, status, destination_address, price_cents, created_at,
-       zone:incity_zones(name),
-       pickup:stops(label),
-       operator:operators(name, public_phone)`,
-    )
-    .eq('booking_id', bookingId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const data = one(
+    await supabase
+      .from('incity_bookings')
+      .select(
+        `id, status, destination_address, price_cents, created_at,
+         zone:incity_zones(name),
+         pickup:stops(label),
+         operator:operators(name, public_phone)`,
+      )
+      .eq('booking_id', bookingId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    'the local ride on this booking',
+  );
 
   if (!data) return null;
 

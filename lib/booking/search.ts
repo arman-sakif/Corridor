@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
+import { one, rows } from '@/lib/supabase/rows';
 import { priceableSegments, type FareRow } from './fares';
 import { seatsAvailable, type CapacityBooking } from './capacity';
 import type { PricingMode } from '@/lib/supabase/database.types';
@@ -85,18 +86,24 @@ export async function searchDepartures({
   // RLS keeps this to routes belonging to active operators, so no status
   // filter is needed here — but the explicit operator join below is the second
   // layer, in case a policy is ever loosened by mistake.
-  const { data: routeRows } = await supabase
-    .from('routes')
-    .select(
-      `id, name, operator_id, pricing_mode,
-       operator:operators!inner(id, name, public_phone, status, airport_fee_cents),
-       route_stops(seq, stop:stops(id, city_id, label, description, is_airport)),
-       fares(from_seq, to_seq, price_cents)`,
-    )
-    .eq('is_active', true)
-    .eq('operator.status', 'active');
+  // Every read on this page is unwrapped rather than defaulted. A refused
+  // query here renders "no departures that day", which is the answer a
+  // passenger acts on by going elsewhere — and nothing would ever say why.
+  const routeRows = rows(
+    await supabase
+      .from('routes')
+      .select(
+        `id, name, operator_id, pricing_mode,
+         operator:operators!inner(id, name, public_phone, status, airport_fee_cents),
+         route_stops(seq, stop:stops(id, city_id, label, description, is_airport)),
+         fares(from_seq, to_seq, price_cents)`,
+      )
+      .eq('is_active', true)
+      .eq('operator.status', 'active'),
+    'the routes on sale',
+  );
 
-  if (!routeRows?.length) return [];
+  if (routeRows.length === 0) return [];
 
   const operators = new Map<
     string,
@@ -151,27 +158,33 @@ export async function searchDepartures({
 
   if (usable.length === 0) return [];
 
-  const { data: departures } = await supabase
-    .from('departures')
-    .select('id, route_id, operator_id, service_date, departure_time, max_seats')
-    .eq('service_date', date)
-    .eq('status', 'scheduled')
-    .in(
-      'route_id',
-      usable.map((route) => route.id),
-    )
-    .order('departure_time');
+  const departures = rows(
+    await supabase
+      .from('departures')
+      .select('id, route_id, operator_id, service_date, departure_time, max_seats')
+      .eq('service_date', date)
+      .eq('status', 'scheduled')
+      .in(
+        'route_id',
+        usable.map((route) => route.id),
+      )
+      .order('departure_time'),
+    'the departures that day',
+  );
 
-  if (!departures?.length) return [];
+  if (departures.length === 0) return [];
 
   // Seats left comes from an aggregate function rather than the bookings
   // table: a passenger may see how full a departure is, never who is on it.
-  const { data: loads } = await supabase.rpc('departure_leg_loads', {
-    p_departure_ids: departures.map((d) => d.id),
-  });
+  const loads = rows(
+    await supabase.rpc('departure_leg_loads', {
+      p_departure_ids: departures.map((d) => d.id),
+    }),
+    'how full they are',
+  );
 
   const loadIndex = new Map<string, Map<number, number>>();
-  for (const load of loads ?? []) {
+  for (const load of loads) {
     const perLeg = loadIndex.get(load.departure_id) ?? new Map<number, number>();
     perLeg.set(load.leg_start, load.seats_taken);
     loadIndex.set(load.departure_id, perLeg);
@@ -264,19 +277,22 @@ export async function departureBoardings({
 }) {
   const supabase = await createClient();
 
-  const { data: departure } = await supabase
-    .from('departures')
-    .select(
-      `id, service_date, departure_time, max_seats, status, route_id,
-       operator:operators(id, name, public_phone, bio,
-         free_luggage_per_seat, extra_luggage_cents, airport_fee_cents),
-       route:routes(id, name, pricing_mode,
-         route_stops(seq, stop:stops(id, city_id, label, description, is_airport,
-           city:cities(name))),
-         fares(from_seq, to_seq, price_cents))`,
-    )
-    .eq('id', departureId)
-    .maybeSingle();
+  const departure = one(
+    await supabase
+      .from('departures')
+      .select(
+        `id, service_date, departure_time, max_seats, status, route_id,
+         operator:operators(id, name, public_phone, bio,
+           free_luggage_per_seat, extra_luggage_cents, airport_fee_cents),
+         route:routes(id, name, pricing_mode,
+           route_stops(seq, stop:stops(id, city_id, label, description, is_airport,
+             city:cities(name))),
+           fares(from_seq, to_seq, price_cents))`,
+      )
+      .eq('id', departureId)
+      .maybeSingle(),
+    'the departure',
+  );
 
   if (!departure?.route) return null;
 
@@ -318,12 +334,13 @@ export async function departureBoardings({
 
   const priced = priceableSegments(route.pricing_mode, route.fares, stops.length);
 
-  const { data: loads } = await supabase.rpc('departure_leg_loads', {
-    p_departure_ids: [departureId],
-  });
+  const loads = rows(
+    await supabase.rpc('departure_leg_loads', { p_departure_ids: [departureId] }),
+    'how full it is',
+  );
 
   const perLeg = new Map<number, number>();
-  for (const load of loads ?? []) perLeg.set(load.leg_start, load.seats_taken);
+  for (const load of loads) perLeg.set(load.leg_start, load.seats_taken);
 
   const boardings = stops
     // The origin filter belongs out here. It was inside the inner chain,

@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { dynamicRoute } from '@/lib/routes';
 
 import { createClient } from '@/lib/supabase/server';
+import { one, rows } from '@/lib/supabase/rows';
 import type { OperatorMemberRole, Tables } from '@/lib/supabase/database.types';
 
 export type Membership = {
@@ -44,7 +45,7 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [{ data: profile }, { data: memberships }] = await Promise.all([
+  const [profileResult, membershipResult] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
     supabase
       .from('operator_members')
@@ -52,11 +53,17 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
       .eq('user_id', user.id),
   ]);
 
+  // A refused read here would otherwise sign someone in as a passenger with
+  // no memberships — the operator dashboard would 404 at them and the reason
+  // would be nowhere on the page.
+  const profile = one(profileResult, 'your profile');
+  const memberships = rows(membershipResult, 'your memberships') as Membership[];
+
   return {
     userId: user.id,
     email: user.email ?? null,
-    profile: profile ?? null,
-    memberships: (memberships ?? []) as Membership[],
+    profile,
+    memberships,
     isAdmin: profile?.platform_role === 'admin',
   };
 });

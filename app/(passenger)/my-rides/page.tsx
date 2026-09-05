@@ -6,6 +6,7 @@ import { ButtonLink, Card, EmptyState, PageHeader } from '@/components/ui';
 import { IconArrowRight, IconClock, IconRoute } from '@/components/icons';
 import { requireViewer } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { dynamicRoute } from '@/lib/routes';
 import { formatCents } from '@/lib/money';
 import { formatRelative, formatServiceDate, formatTime, todayInToronto } from '@/lib/time';
@@ -32,17 +33,18 @@ export default async function MyRidesPage() {
   await requireViewer('/my-rides');
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from('bookings')
-    .select(
-      `id, seats, status, hold_expires_at, total_cents,
-       from_stop:stops!bookings_from_stop_id_fkey(label, city:cities(name)),
-       to_stop:stops!bookings_to_stop_id_fkey(label, city:cities(name)),
-       departure:departures(service_date, departure_time, operator:operators(name))`,
-    )
-    .order('created_at', { ascending: false });
-
-  const rides = (data ?? []) as unknown as Ride[];
+  const rides = rows(
+    await supabase
+      .from('bookings')
+      .select(
+        `id, seats, status, hold_expires_at, total_cents,
+         from_stop:stops!bookings_from_stop_id_fkey(label, city:cities(name)),
+         to_stop:stops!bookings_to_stop_id_fkey(label, city:cities(name)),
+         departure:departures(service_date, departure_time, operator:operators(name))`,
+      )
+      .order('created_at', { ascending: false }),
+    'your rides',
+  ) as unknown as Ride[];
   const today = todayInToronto();
 
   const upcoming = rides.filter((ride) => (ride.departure?.service_date ?? '') >= today);

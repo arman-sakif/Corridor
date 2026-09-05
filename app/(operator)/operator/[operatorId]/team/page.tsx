@@ -4,6 +4,7 @@ import { removeTeamMember, revokeInvite } from '@/lib/operator/actions';
 import { requireOperatorRole } from '@/lib/auth/session';
 import { Badge, Button, Card, CardHeader, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { siteUrl } from '@/lib/supabase/env';
 import { formatRelative } from '@/lib/time';
 
@@ -37,20 +38,23 @@ export default async function TeamPage({
   const isOwner = membership.role === 'owner';
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from('operator_members')
-    .select('id, role, user_id, profile:profiles(full_name, phone)')
-    .eq('operator_id', operatorId);
+  const members = rows(
+    await supabase
+      .from('operator_members')
+      .select('id, role, user_id, profile:profiles(full_name, phone)')
+      .eq('operator_id', operatorId),
+    'your team',
+  ) as unknown as Member[];
 
-  const { data: inviteRows } = await supabase
-    .from('operator_invites')
-    .select('id, email, role, created_at')
-    .eq('operator_id', operatorId)
-    .is('accepted_at', null)
-    .order('created_at', { ascending: false });
-
-  const members = (data ?? []) as unknown as Member[];
-  const invites = (inviteRows ?? []) as Invite[];
+  const invites = rows(
+    await supabase
+      .from('operator_invites')
+      .select('id, email, role, created_at')
+      .eq('operator_id', operatorId)
+      .is('accepted_at', null)
+      .order('created_at', { ascending: false }),
+    'the open invitations',
+  ) as Invite[];
   const ownerCount = members.filter((m) => m.role === 'owner').length;
 
   return (

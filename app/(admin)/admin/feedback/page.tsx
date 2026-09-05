@@ -1,6 +1,7 @@
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui';
 import { IconInfo } from '@/components/icons';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { formatRelative } from '@/lib/time';
 
 type Row = {
@@ -22,13 +23,14 @@ const tone = { idea: 'brand', problem: 'warn', praise: 'good', other: 'neutral' 
  */
 export default async function AdminFeedbackPage() {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from('feedback')
-    .select('id, kind, message, created_at, author:profiles(full_name)')
-    .order('created_at', { ascending: false })
-    .limit(200);
-
-  const rows = (data ?? []) as unknown as Row[];
+  const items = rows(
+    await supabase
+      .from('feedback')
+      .select('id, kind, message, created_at, author:profiles(full_name)')
+      .order('created_at', { ascending: false })
+      .limit(200),
+    'the feedback',
+  ) as unknown as Row[];
 
   return (
     <>
@@ -37,7 +39,7 @@ export default async function AdminFeedbackPage() {
         description="Ideas and annoyances sent by passengers, drivers and operators."
       />
 
-      {rows.length === 0 ? (
+      {items.length === 0 ? (
         <Card className="p-6">
           <EmptyState icon={<IconInfo />} title="Nothing yet">
             Anyone signed in can send something from their Tell us something page.
@@ -45,7 +47,7 @@ export default async function AdminFeedbackPage() {
         </Card>
       ) : (
         <ul className="space-y-2">
-          {rows.map((row) => (
+          {items.map((row) => (
             <li key={row.id}>
               <Card className="p-4">
                 <div className="flex flex-wrap items-center gap-2">

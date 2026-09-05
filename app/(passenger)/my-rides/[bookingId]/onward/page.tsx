@@ -9,6 +9,7 @@ import { requireViewer } from '@/lib/auth/session';
 import { Alert, Badge, Button, Card, CardHeader, EmptyState, PageHeader } from '@/components/ui';
 import { IconVan } from '@/components/icons';
 import { createClient } from '@/lib/supabase/server';
+import { one } from '@/lib/supabase/rows';
 import { dynamicRoute } from '@/lib/routes';
 import { formatCents } from '@/lib/money';
 
@@ -40,16 +41,17 @@ export default async function OnwardPage({
   const viewer = await requireViewer(`/my-rides/${bookingId}/onward`);
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from('bookings')
-    .select(
-      `id, status, passenger_id,
-       to_stop:stops!bookings_to_stop_id_fkey(label, city:cities(id, name))`,
-    )
-    .eq('id', bookingId)
-    .maybeSingle();
-
-  const booking = data as unknown as {
+  const booking = one(
+    await supabase
+      .from('bookings')
+      .select(
+        `id, status, passenger_id,
+         to_stop:stops!bookings_to_stop_id_fkey(label, city:cities(id, name))`,
+      )
+      .eq('id', bookingId)
+      .maybeSingle(),
+    'your booking',
+  ) as unknown as {
     id: string;
     status: string;
     passenger_id: string;

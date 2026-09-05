@@ -4,6 +4,7 @@ import { CityForm } from './city-form';
 import { setCityActive } from '../actions';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 
 export const metadata: Metadata = { title: 'Cities' };
 
@@ -11,13 +12,11 @@ export default async function AdminCitiesPage() {
   const supabase = await createClient();
 
   // The admin client is not needed: cities_admin_all lets an admin read
-  // inactive rows that the public policy hides.
-  const { data: cities } = await supabase
-    .from('cities')
-    .select('id, name, province, is_active')
-    .order('name');
-
-  const rows = cities ?? [];
+  // inactive cities that the public policy hides.
+  const cities = rows(
+    await supabase.from('cities').select('id, name, province, is_active').order('name'),
+    'the city list',
+  );
 
   return (
     <>
@@ -37,7 +36,7 @@ export default async function AdminCitiesPage() {
 
         <Card>
           <CardHeader title="On the list" />
-          {rows.length === 0 ? (
+          {cities.length === 0 ? (
             <div className="p-5">
               <EmptyState title="No cities yet">
                 Add Toronto and Windsor first — that is the corridor most operators run.
@@ -54,7 +53,7 @@ export default async function AdminCitiesPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((city) => (
+                {cities.map((city) => (
                   <tr key={city.id}>
                     <Td className="font-medium text-ink-900">{city.name}</Td>
                     <Td>{city.province}</Td>

@@ -3,6 +3,7 @@ import Link from 'next/link';
 
 import { Card, EmptyState } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 
 export const metadata: Metadata = { title: 'Operators' };
 
@@ -15,13 +16,14 @@ export default async function OperatorsPage() {
   // 1000 rows, so filtering the page in memory would start silently dropping
   // intercity operators the moment the table outgrew that — and a short list
   // reads exactly like a complete one.
-  const { data: operators } = await supabase
-    .from('operators')
-    .select('id, name, bio, public_phone, type')
-    .eq('type', 'intercity')
-    .order('name');
-
-  const rows = operators ?? [];
+  const operators = rows(
+    await supabase
+      .from('operators')
+      .select('id, name, bio, public_phone, type')
+      .eq('type', 'intercity')
+      .order('name'),
+    'the operators',
+  );
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -40,7 +42,7 @@ export default async function OperatorsPage() {
           </EmptyState>
         ) : (
           <ul className="space-y-3">
-            {rows.map((operator) => (
+            {operators.map((operator) => (
               <li key={operator.id}>
                 <Link href={`/operators/${operator.id}`}>
                   <Card className="p-5 transition-shadow hover:shadow-sm">

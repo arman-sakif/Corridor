@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { SubscriptionForm } from './subscription-form';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { formatCents } from '@/lib/money';
 import { formatServiceDate } from '@/lib/time';
 import type { SubscriptionStatus } from '@/lib/supabase/database.types';
@@ -18,7 +19,7 @@ const tone: Record<SubscriptionStatus, 'good' | 'warn' | 'bad'> = {
 export default async function AdminSubscriptionsPage() {
   const supabase = await createClient();
 
-  const [{ data: operators }, { data: subscriptions }] = await Promise.all([
+  const [operatorResult, subscriptionResult] = await Promise.all([
     supabase.from('operators').select('id, name, status').order('name'),
     supabase
       .from('subscriptions')
@@ -29,8 +30,9 @@ export default async function AdminSubscriptionsPage() {
       .order('updated_at', { ascending: false }),
   ]);
 
-  const byOperator = new Map((subscriptions ?? []).map((s) => [s.operator_id, s]));
-  const rows = operators ?? [];
+  const subscriptions = rows(subscriptionResult, 'the subscriptions');
+  const operators = rows(operatorResult, 'the operator list');
+  const byOperator = new Map(subscriptions.map((s) => [s.operator_id, s]));
 
   return (
     <>
@@ -41,7 +43,7 @@ export default async function AdminSubscriptionsPage() {
 
       <Card>
         <CardHeader title="Per operator" />
-        {rows.length === 0 ? (
+        {operators.length === 0 ? (
           <div className="p-5">
             <EmptyState title="No operators yet">
               Activate a business first, then record what it is paying.
@@ -60,7 +62,7 @@ export default async function AdminSubscriptionsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((operator) => {
+              {operators.map((operator) => {
                 const subscription = byOperator.get(operator.id);
                 return (
                   <tr key={operator.id}>

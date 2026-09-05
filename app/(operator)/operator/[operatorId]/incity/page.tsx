@@ -5,6 +5,7 @@ import { requireOperatorRole } from '@/lib/auth/session';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader } from '@/components/ui';
 import { IconVan } from '@/components/icons';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { formatCents } from '@/lib/money';
 import { formatRelative, formatServiceDate, formatTime } from '@/lib/time';
 import type { IncityBookingStatus } from '@/lib/supabase/database.types';
@@ -51,22 +52,23 @@ export default async function IncityRequestsPage({
   if (membership.operator?.type !== 'incity') notFound();
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from('incity_bookings')
-    .select(
-      `id, status, destination_address, price_cents, created_at,
-       zone:incity_zones(name),
-       pickup:stops(label),
-       booking:bookings(
-         id, seats,
-         passenger:profiles(full_name, phone),
-         departure:departures(service_date, departure_time)
-       )`,
-    )
-    .eq('operator_id', operatorId)
-    .order('created_at', { ascending: false });
-
-  const rides = (data ?? []) as unknown as Ride[];
+  const rides = rows(
+    await supabase
+      .from('incity_bookings')
+      .select(
+        `id, status, destination_address, price_cents, created_at,
+         zone:incity_zones(name),
+         pickup:stops(label),
+         booking:bookings(
+           id, seats,
+           passenger:profiles(full_name, phone),
+           departure:departures(service_date, departure_time)
+         )`,
+      )
+      .eq('operator_id', operatorId)
+      .order('created_at', { ascending: false }),
+    'the local ride requests',
+  ) as unknown as Ride[];
   const waiting = rides.filter((ride) => ride.status === 'held');
   const settled = rides.filter((ride) => ride.status !== 'held');
 

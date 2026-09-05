@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
+import { count, rows } from '@/lib/supabase/rows';
 import type { Tables } from '@/lib/supabase/database.types';
 
 /**
@@ -17,14 +18,15 @@ export type Notification = Tables<'notifications'>;
 export async function listNotifications(userId: string, limit = 50): Promise<Notification[]> {
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(limit);
-
-  return data ?? [];
+  return rows(
+    await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+    'your notifications',
+  );
 }
 
 /**
@@ -34,11 +36,12 @@ export async function listNotifications(userId: string, limit = 50): Promise<Not
 export async function unreadCount(userId: string): Promise<number> {
   const supabase = await createClient();
 
-  const { count } = await supabase
-    .from('notifications')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .is('read_at', null);
-
-  return count ?? 0;
+  return count(
+    await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .is('read_at', null),
+    'your unread notifications',
+  );
 }

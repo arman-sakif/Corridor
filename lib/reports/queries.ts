@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import type { ReportCategory, ReportStatus } from '@/lib/supabase/database.types';
 
 /**
@@ -87,22 +88,27 @@ export async function listReports(operatorId?: string): Promise<ReportRow[]> {
 
   if (operatorId) query = query.eq('operator_id', operatorId);
 
-  const { data } = await query;
-  const rows = (data ?? []) as unknown as Raw[];
-  if (rows.length === 0) return [];
+  const complaints = rows(await query, 'the complaints') as unknown as Raw[];
+  if (complaints.length === 0) return [];
 
   // Who drove, looked up once for the whole page rather than per row.
   const departureIds = [
-    ...new Set(rows.map((row) => row.booking?.departure?.id).filter(Boolean)),
+    ...new Set(complaints.map((row) => row.booking?.departure?.id).filter(Boolean)),
   ] as string[];
 
-  const { data: vehicles } = await supabase
-    .from('departure_vehicles')
-    .select('departure_id, vehicle:vehicles(label), driver:profiles(full_name)')
-    .in('departure_id', departureIds.length > 0 ? departureIds : ['00000000-0000-0000-0000-000000000000']);
+  const vehicles = rows(
+    await supabase
+      .from('departure_vehicles')
+      .select('departure_id, vehicle:vehicles(label), driver:profiles(full_name)')
+      .in(
+        'departure_id',
+        departureIds.length > 0 ? departureIds : ['00000000-0000-0000-0000-000000000000'],
+      ),
+    'who drove them',
+  );
 
   const byDeparture = new Map<string, { vehicle: string | null; driver: string | null }[]>();
-  for (const row of (vehicles ?? []) as unknown as {
+  for (const row of vehicles as unknown as {
     departure_id: string;
     vehicle: { label: string } | null;
     driver: { full_name: string } | null;
@@ -112,7 +118,7 @@ export async function listReports(operatorId?: string): Promise<ReportRow[]> {
     byDeparture.set(row.departure_id, list);
   }
 
-  return rows.map((row) => ({
+  return complaints.map((row) => ({
     id: row.id,
     category: row.category,
     note: row.note,
@@ -135,13 +141,16 @@ export async function listReports(operatorId?: string): Promise<ReportRow[]> {
 export async function reportsForBooking(bookingId: string): Promise<ReportRow[]> {
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from('reports')
-    .select(SELECT)
-    .eq('booking_id', bookingId)
-    .order('created_at', { ascending: false });
+  const filed = rows(
+    await supabase
+      .from('reports')
+      .select(SELECT)
+      .eq('booking_id', bookingId)
+      .order('created_at', { ascending: false }),
+    'the complaints on this booking',
+  ) as unknown as Raw[];
 
-  return ((data ?? []) as unknown as Raw[]).map((row) => ({
+  return filed.map((row) => ({
     id: row.id,
     category: row.category,
     note: row.note,

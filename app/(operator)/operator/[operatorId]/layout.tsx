@@ -5,6 +5,7 @@ import { SiteHeader } from '@/components/site-header';
 import { NavTabs } from '@/components/nav';
 import { requireViewer } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
+import { one } from '@/lib/supabase/rows';
 import { Alert, Badge } from '@/components/ui';
 
 const intercityTabs = [
@@ -59,13 +60,16 @@ export default async function OperatorLayout({
   const tabs = operator?.type === 'incity' ? incityTabs : intercityTabs;
 
   const supabase = await createClient();
-  const { data: subscription } = await supabase
-    .from('subscriptions')
-    .select('status')
-    .eq('operator_id', operatorId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const subscription = one(
+    await supabase
+      .from('subscriptions')
+      .select('status')
+      .eq('operator_id', operatorId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    'the subscription',
+  );
   const pastDue = subscription?.status === 'past_due';
 
   return (

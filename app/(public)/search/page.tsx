@@ -6,6 +6,7 @@ import { Badge, ButtonLink, Card, EmptyState } from '@/components/ui';
 import { IconArrowRight, IconPin, IconRoute, IconSearch } from '@/components/icons';
 import { searchDepartures } from '@/lib/booking/search';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { dynamicRoute } from '@/lib/routes';
 import { formatCents } from '@/lib/money';
 import {
@@ -26,13 +27,12 @@ export default async function SearchPage({
   const params = await searchParams;
   const supabase = await createClient();
 
-  const { data: cities } = await supabase
-    .from('cities')
-    .select('id, name')
-    .eq('is_active', true)
-    .order('name');
+  const cities = rows(
+    await supabase.from('cities').select('id, name').eq('is_active', true).order('name'),
+    'the city list',
+  );
 
-  const cityName = new Map((cities ?? []).map((city) => [city.id, city.name]));
+  const cityName = new Map(cities.map((city) => [city.id, city.name]));
   const today = todayInToronto();
   const date = params.date && isValidServiceDate(params.date) ? params.date : today;
 
@@ -47,7 +47,7 @@ export default async function SearchPage({
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
       <SearchForm
-        cities={cities ?? []}
+        cities={cities}
         defaults={{ from: params.from ?? '', to: params.to ?? '', date }}
       />
 

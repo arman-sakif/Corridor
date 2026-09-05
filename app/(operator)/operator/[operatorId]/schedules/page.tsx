@@ -2,6 +2,7 @@ import { ScheduleForm } from './schedule-form';
 import { setScheduleActive } from '@/lib/operator/setup';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { formatDaysOfWeek, formatServiceDate, formatTime } from '@/lib/time';
 
 export default async function SchedulesPage({
@@ -12,27 +13,32 @@ export default async function SchedulesPage({
   const { operatorId } = await params;
   const supabase = await createClient();
 
-  const { data: routes } = await supabase
-    .from('routes')
-    .select('id, name, is_active, route_stops(id)')
-    .eq('operator_id', operatorId)
-    .order('name');
+  const routes = rows(
+    await supabase
+      .from('routes')
+      .select('id, name, is_active, route_stops(id)')
+      .eq('operator_id', operatorId)
+      .order('name'),
+    'your routes',
+  );
 
-  const routeIds = (routes ?? []).map((route) => route.id);
+  const routeIds = routes.map((route) => route.id);
 
-  const { data: schedules } = routeIds.length
-    ? await supabase
-        .from('schedules')
-        .select(
-          'id, route_id, departure_time, days_of_week, max_seats, active_from, active_to, is_active',
-        )
-        .in('route_id', routeIds)
-        .order('departure_time')
-    : { data: [] };
+  const schedules = routeIds.length
+    ? rows(
+        await supabase
+          .from('schedules')
+          .select(
+            'id, route_id, departure_time, days_of_week, max_seats, active_from, active_to, is_active',
+          )
+          .in('route_id', routeIds)
+          .order('departure_time'),
+        'your timetable',
+      )
+    : [];
 
-  const nameOf = new Map((routes ?? []).map((route) => [route.id, route.name]));
-  const bookable = (routes ?? []).filter((route) => (route.route_stops ?? []).length >= 2);
-  const rows = schedules ?? [];
+  const nameOf = new Map(routes.map((route) => [route.id, route.name]));
+  const bookable = routes.filter((route) => (route.route_stops ?? []).length >= 2);
 
   return (
     <>
@@ -52,7 +58,7 @@ export default async function SchedulesPage({
 
         <Card>
           <CardHeader title="Running now" />
-          {rows.length === 0 ? (
+          {schedules.length === 0 ? (
             <div className="p-5">
               <EmptyState title="Nothing on the timetable">
                 Add your first departure time and passengers can start booking it.
@@ -71,7 +77,7 @@ export default async function SchedulesPage({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((schedule) => (
+                {schedules.map((schedule) => (
                   <tr key={schedule.id}>
                     <Td className="font-medium text-ink-900">
                       {nameOf.get(schedule.route_id) ?? 'Route'}

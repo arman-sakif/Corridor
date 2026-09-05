@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { regenerateDepartures } from '@/lib/operator/setup';
 import { Button, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { addDays, formatServiceDate, formatTime, todayInToronto } from '@/lib/time';
 import { legLoads, type CapacityBooking } from '@/lib/booking/capacity';
 
@@ -34,29 +35,35 @@ export default async function DeparturesPage({
   const days = Number(query.days) || 14;
   const horizon = addDays(today, days);
 
-  const { data: departures } = await supabase
-    .from('departures')
-    .select('id, service_date, departure_time, max_seats, status, route:routes(id, name, route_stops(seq))')
-    .eq('operator_id', operatorId)
-    .gte('service_date', today)
-    .lte('service_date', horizon)
-    .order('service_date')
-    .order('departure_time');
+  const departures = rows(
+    await supabase
+      .from('departures')
+      .select(
+        'id, service_date, departure_time, max_seats, status, route:routes(id, name, route_stops(seq))',
+      )
+      .eq('operator_id', operatorId)
+      .gte('service_date', today)
+      .lte('service_date', horizon)
+      .order('service_date')
+      .order('departure_time'),
+    'your departures',
+  ) as unknown as DepartureRow[];
 
-  const rows = (departures ?? []) as unknown as DepartureRow[];
-
-  const { data: bookings } = rows.length
-    ? await supabase
-        .from('bookings')
-        .select('departure_id, from_seq, to_seq, seats, status, hold_expires_at')
-        .in(
-          'departure_id',
-          rows.map((row) => row.id),
-        )
-    : { data: [] };
+  const bookings = departures.length
+    ? rows(
+        await supabase
+          .from('bookings')
+          .select('departure_id, from_seq, to_seq, seats, status, hold_expires_at')
+          .in(
+            'departure_id',
+            departures.map((departure) => departure.id),
+          ),
+        'the seats sold on them',
+      )
+    : [];
 
   const byDeparture = new Map<string, CapacityBooking[]>();
-  for (const booking of bookings ?? []) {
+  for (const booking of bookings) {
     const list = byDeparture.get(booking.departure_id) ?? [];
     list.push(booking);
     byDeparture.set(booking.departure_id, list);
@@ -84,7 +91,7 @@ export default async function DeparturesPage({
           title="Seats taken, leg by leg"
           description="Each block is one stretch between two stops. A departure is full only where a block is full."
         />
-        {rows.length === 0 ? (
+        {departures.length === 0 ? (
           <div className="p-5">
             <EmptyState
               title="Nothing on sale yet"
@@ -113,7 +120,7 @@ export default async function DeparturesPage({
               </tr>
             </thead>
             <tbody>
-              {rows.map((departure) => {
+              {departures.map((departure) => {
                 const stopCount = departure.route?.route_stops.length ?? 0;
                 const loads = legLoads(byDeparture.get(departure.id) ?? [], stopCount, now);
                 const busiest = loads.length ? Math.max(...loads) : 0;

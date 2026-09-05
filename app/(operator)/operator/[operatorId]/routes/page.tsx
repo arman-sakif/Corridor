@@ -4,6 +4,7 @@ import { RouteForm } from './route-form';
 import { setRouteActive } from '@/lib/operator/setup';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 
 type RouteRow = {
   id: string;
@@ -21,7 +22,7 @@ export default async function RoutesPage({
   const { operatorId } = await params;
   const supabase = await createClient();
 
-  const [{ data: stops }, { data: routes }] = await Promise.all([
+  const [stopResult, routeResult] = await Promise.all([
     supabase
       .from('stops')
       .select('id, label, city:cities(name)')
@@ -37,9 +38,9 @@ export default async function RoutesPage({
       .order('name'),
   ]);
 
-  const rows = (routes ?? []) as unknown as RouteRow[];
+  const routes = rows(routeResult, 'your routes') as unknown as RouteRow[];
 
-  const stopOptions = (stops ?? []).map((stop) => ({
+  const stopOptions = rows(stopResult, 'your stops').map((stop) => ({
     id: stop.id,
     label: stop.city?.name ? `${stop.city.name} — ${stop.label}` : stop.label,
   }));
@@ -62,7 +63,7 @@ export default async function RoutesPage({
 
         <Card>
           <CardHeader title="Your routes" />
-          {rows.length === 0 ? (
+          {routes.length === 0 ? (
             <div className="p-5">
               <EmptyState title="No routes yet">
                 Once a route exists you can set a price for every pair of stops on it.
@@ -79,7 +80,7 @@ export default async function RoutesPage({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((route) => {
+                {routes.map((route) => {
                   const ordered = [...route.route_stops].sort((a, b) => a.seq - b.seq);
                   return (
                     <tr key={route.id}>

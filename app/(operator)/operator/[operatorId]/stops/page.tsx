@@ -2,6 +2,7 @@ import { StopForm } from './stop-form';
 import { setStopActive } from '@/lib/operator/setup';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 
 export default async function StopsPage({
   params,
@@ -11,7 +12,7 @@ export default async function StopsPage({
   const { operatorId } = await params;
   const supabase = await createClient();
 
-  const [{ data: cities }, { data: stops }] = await Promise.all([
+  const [cityResult, stopResult] = await Promise.all([
     supabase.from('cities').select('id, name').eq('is_active', true).order('name'),
     supabase
       .from('stops')
@@ -20,7 +21,8 @@ export default async function StopsPage({
       .order('label'),
   ]);
 
-  const rows = stops ?? [];
+  const cities = rows(cityResult, 'the city list');
+  const stops = rows(stopResult, 'your stops');
 
   return (
     <>
@@ -35,12 +37,12 @@ export default async function StopsPage({
           <p className="mt-1 mb-4 text-sm text-ink-600">
             Be specific enough that a passenger standing there knows they are in the right place.
           </p>
-          <StopForm operatorId={operatorId} cities={cities ?? []} />
+          <StopForm operatorId={operatorId} cities={cities} />
         </Card>
 
         <Card>
           <CardHeader title="Your stops" />
-          {rows.length === 0 ? (
+          {stops.length === 0 ? (
             <div className="p-5">
               <EmptyState title="No stops yet">
                 Start with the two ends of your run — where you leave from and where you finish.
@@ -57,7 +59,7 @@ export default async function StopsPage({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((stop) => (
+                {stops.map((stop) => (
                   <tr key={stop.id}>
                     <Td className="whitespace-nowrap font-medium text-ink-900">
                       {stop.city?.name}

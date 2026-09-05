@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 
 import { Badge, Card, EmptyState } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { one, rows } from '@/lib/supabase/rows';
 import { formatCents } from '@/lib/money';
 
 export const metadata: Metadata = { title: 'Operator' };
@@ -21,11 +22,14 @@ export default async function OperatorProfilePage({
   const { operatorId } = await params;
   const supabase = await createClient();
 
-  const { data: operator } = await supabase
-    .from('operators')
-    .select('id, name, bio, public_phone, type')
-    .eq('id', operatorId)
-    .maybeSingle();
+  const operator = one(
+    await supabase
+      .from('operators')
+      .select('id, name, bio, public_phone, type')
+      .eq('id', operatorId)
+      .maybeSingle(),
+    'the operator',
+  );
 
   if (!operator) notFound();
 
@@ -34,16 +38,19 @@ export default async function OperatorProfilePage({
   // about a company whose whole offering is a price list.
   const isIncity = operator.type === 'incity';
 
-  const { data: zones } = isIncity
-    ? await supabase
-        .from('incity_zones')
-        .select('id, name, flat_price_cents')
-        .eq('operator_id', operatorId)
-        .eq('is_active', true)
-        .order('flat_price_cents')
-    : { data: null };
+  const zones = isIncity
+    ? rows(
+        await supabase
+          .from('incity_zones')
+          .select('id, name, flat_price_cents')
+          .eq('operator_id', operatorId)
+          .eq('is_active', true)
+          .order('flat_price_cents'),
+        'their zones',
+      )
+    : [];
 
-  const [{ data: routes }, { data: ratings }] = await Promise.all([
+  const [routeResult, ratingResult] = await Promise.all([
     supabase
       .from('routes')
       .select('id, name, route_stops(seq, stop:stops(label, city:cities(name)))')
@@ -58,7 +65,8 @@ export default async function OperatorProfilePage({
       .limit(10),
   ]);
 
-  const reviews = ratings ?? [];
+  const routes = rows(routeResult, 'their routes');
+  const reviews = rows(ratingResult, 'their reviews');
   const average =
     reviews.length > 0
       ? (reviews.reduce((sum, rating) => sum + rating.score, 0) / reviews.length).toFixed(1)
@@ -91,11 +99,11 @@ export default async function OperatorProfilePage({
           {isIncity ? 'Where they drop off' : 'Where they run'}
         </h2>
         {isIncity ? (
-          (zones ?? []).length === 0 ? (
+          zones.length === 0 ? (
             <p className="mt-3 text-sm text-ink-500">No areas on sale yet.</p>
           ) : (
             <ul className="mt-3 space-y-2">
-              {(zones ?? []).map((zone) => (
+              {zones.map((zone) => (
                 <li
                   key={zone.id}
                   className="flex items-baseline justify-between rounded-xl bg-white p-4 ring-1 ring-ink-200"
@@ -108,11 +116,11 @@ export default async function OperatorProfilePage({
               ))}
             </ul>
           )
-        ) : (routes ?? []).length === 0 ? (
+        ) : routes.length === 0 ? (
           <p className="mt-3 text-sm text-ink-500">No routes published yet.</p>
         ) : (
           <ul className="mt-3 space-y-2">
-            {(routes ?? []).map((route) => {
+            {routes.map((route) => {
               const ordered = [...(route.route_stops ?? [])].sort((a, b) => a.seq - b.seq);
               return (
                 <li key={route.id} className="rounded-xl bg-white p-4 ring-1 ring-ink-200">

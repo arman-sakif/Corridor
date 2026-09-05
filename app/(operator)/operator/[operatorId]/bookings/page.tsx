@@ -5,6 +5,7 @@ import { BookingStatusBadge } from '@/components/booking-status';
 import { approveBooking, declineBooking } from '@/lib/booking/actions';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from '@/components/ui';
 import { createClient } from '@/lib/supabase/server';
+import { rows } from '@/lib/supabase/rows';
 import { formatCents } from '@/lib/money';
 import { formatRelative, formatServiceDate, formatTime } from '@/lib/time';
 import type { BookingStatus } from '@/lib/supabase/database.types';
@@ -42,20 +43,21 @@ export default async function BookingsQueuePage({
   const { operatorId } = await params;
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from('bookings')
-    .select(
-      `id, seats, luggage_count, status, hold_expires_at, total_cents, passenger_note, passenger_id,
-       passenger:profiles(full_name, phone, gender, accommodation_notes),
-       from_stop:stops!bookings_from_stop_id_fkey(label, city:cities(name)),
-       to_stop:stops!bookings_to_stop_id_fkey(label, city:cities(name)),
-       departure:departures!inner(id, operator_id, service_date, departure_time)`,
-    )
-    .eq('departure.operator_id', operatorId)
-    .order('created_at', { ascending: false })
-    .limit(200);
-
-  const all = (data ?? []) as unknown as Request[];
+  const all = rows(
+    await supabase
+      .from('bookings')
+      .select(
+        `id, seats, luggage_count, status, hold_expires_at, total_cents, passenger_note, passenger_id,
+         passenger:profiles(full_name, phone, gender, accommodation_notes),
+         from_stop:stops!bookings_from_stop_id_fkey(label, city:cities(name)),
+         to_stop:stops!bookings_to_stop_id_fkey(label, city:cities(name)),
+         departure:departures!inner(id, operator_id, service_date, departure_time)`,
+      )
+      .eq('departure.operator_id', operatorId)
+      .order('created_at', { ascending: false })
+      .limit(200),
+    'the seat requests',
+  ) as unknown as Request[];
   const now = new Date();
 
   // A hold whose clock has run out is dead whether or not the sweep has
