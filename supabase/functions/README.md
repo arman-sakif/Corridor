@@ -34,3 +34,4 @@ this file is the signpost:
 | `rate_passenger()` | `20260830000026_rate_passenger.sql` | The operator side of a rating. Manager or assigned driver; the subject comes from the booking. |
 | `raise_red_flag()` | `20260830000024_driver_red_flags.sql` | A mark on a passenger, raiseable by the driver who was actually there. |
 | `file_report()`, `resolve_report()` | `20260830000023_reports_and_feedback.sql` | A passenger complains about a trip; the operator or an admin closes it. |
+| `is_departure_passenger()` | `20260830000028_passenger_sees_booked_departures.sql` | RLS lookup — a passenger keeps sight of a departure they booked after it has run. |

@@ -17,6 +17,8 @@ import { one, rows } from '@/lib/supabase/rows';
 import { formatCents } from '@/lib/money';
 import { formatServiceDateLong, formatTime, torontoInstant } from '@/lib/time';
 import { legLoads, type CapacityBooking } from '@/lib/booking/capacity';
+import { seatMap } from '@/lib/booking/seat-map';
+import { SeatLegend, SeatMap } from '@/components/seat-map';
 import { DRIVING_ROLES } from '@/lib/auth/routing';
 import type { BookingStatus, PaymentMethod } from '@/lib/supabase/database.types';
 
@@ -104,6 +106,9 @@ export default async function DepartureDayPage({
     ['approved', 'completed', 'settled', 'no_show'].includes(p.status),
   );
   const loads = legLoads(passengers as unknown as CapacityBooking[], stops.length);
+  // The same bookings as the bars below, drawn as seats: confirmed plus held
+  // squares always equal the busiest leg.
+  const seats = seatMap(passengers as unknown as CapacityBooking[], departure.max_seats);
 
   const hasLeft = torontoInstant(departure.service_date, departure.departure_time) <= new Date();
   const unassigned = riding.filter((p) => !p.assigned_vehicle_id);
@@ -254,7 +259,13 @@ export default async function DepartureDayPage({
 
         <div className="space-y-6">
           <Card className="p-5">
-            <h2 className="font-semibold text-ink-900">Load per leg</h2>
+            <h2 className="font-semibold text-ink-900">How full</h2>
+            <div className="mt-3">
+              <SeatMap {...seats} size="md" />
+              <SeatLegend className="mt-3" />
+            </div>
+
+            <h3 className="mt-5 text-sm font-semibold text-ink-900">Load per leg</h3>
             <p className="mt-1 mb-3 text-sm text-ink-600">
               {departure.max_seats} seats on any one stretch.
             </p>

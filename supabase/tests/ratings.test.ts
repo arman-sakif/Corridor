@@ -161,23 +161,20 @@ describe('ratings', () => {
 
   /* ------------------------------------------------ passenger → operator */
 
-  it('lets a passenger rate a trip that has finished — which they can no longer see', async () => {
-    // The departure is marked completed first, deliberately. A passenger loses
-    // sight of it at that moment (`departures_select_public` is scoped to
+  it('lets a passenger rate a trip that has finished', async () => {
+    // The departure is marked completed first, deliberately. Search stops
+    // showing it at that moment (`departures_select_public` is scoped to
     // `status = 'scheduled'`), and that is exactly when they are asked to rate.
     // An earlier version of this policy joined `departures` inside itself, so
     // the EXISTS found nothing and every real rating was refused; the test
     // passed anyway because it rated a departure that was still scheduled.
+    //
+    // Since `20260830000028` a passenger keeps sight of a departure they booked,
+    // but the policy still asks `departure_operator()` rather than joining, so
+    // it would hold even if that visibility were taken away again.
     await test.raw(`update public.departures set status = 'completed' where id = $1`, [
       corridor.departureId,
     ]);
-
-    const invisible = await test.asUser(
-      rider,
-      `select id from public.departures where id = $1`,
-      [corridor.departureId],
-    );
-    assert.deepEqual(invisible, [], 'the passenger cannot see the finished departure');
 
     const rows = await test.asUser(
       rider,
