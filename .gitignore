@@ -51,3 +51,6 @@ supabase-creds.txt
 /.claude/
 /CLAUDE.md
 
+# local-only notes and account list
+/_local/
+
