@@ -204,7 +204,9 @@ async function deliver(recipients: string[], notification: Notification): Promis
 
   const resend = new Resend(apiKey);
 
-  const { error } = await resend.emails.send({
+  // Held whole rather than destructured: this is Resend, not a Supabase read,
+  // but read-paths.test.ts cannot tell the two apart by their shape.
+  const sent = await resend.emails.send({
     // Falls back to Resend's sandbox sender, which is the only address that
     // works before a domain is verified. The previous default was a made-up
     // domain, so a project with a valid key and no NOTIFY_FROM_EMAIL got a
@@ -227,9 +229,19 @@ async function deliver(recipients: string[], notification: Notification): Promis
   // delivers only to the account owner. Every other recipient's message is
   // refused, and this is the only thing that keeps the code inside it
   // readable — which is what makes recovery testable without a domain.
-  if (error) {
-    logInstead(recipients, notification, link, `Resend refused it — ${error.message}`);
+  if (sent.error) {
+    logInstead(recipients, notification, link, `Resend refused it — ${sent.error.message}`);
+    return;
   }
+
+  // Logged on success too, so a sent email and a skipped one no longer leave
+  // the same silence behind. Without the address or the body: a credential
+  // lives in the body, and the id is enough to find the message in Resend.
+  console.info('[notify] delivered', {
+    kind: notification.kind,
+    recipients: recipients.length,
+    id: sent.data?.id,
+  });
 }
 
 /**

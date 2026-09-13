@@ -43,7 +43,7 @@ export function ForgotPasswordForm({ next }: { next: string }) {
 
         <p className="text-sm text-ink-600">
           We sent a code to <span className="font-medium text-ink-900">{email}</span>. It works for
-          an hour.
+          an hour, until you ask for another code or a reset link — that cancels this one.
         </p>
 
         {/*
@@ -121,6 +121,9 @@ export function ForgotPasswordForm({ next }: { next: string }) {
         <MethodButton method="link" chosen={method} onChoose={setMethod} tone="secondary">
           Email me a password reset link
         </MethodButton>
+        <p className="text-center text-xs text-ink-500">
+          Each request cancels the code or link in any earlier email, so use the newest one.
+        </p>
       </div>
 
       <p className="pt-1 text-center text-sm text-ink-600">

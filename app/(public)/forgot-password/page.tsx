@@ -24,7 +24,8 @@ export default async function ForgotPasswordPage({
     <div className="mx-auto w-full max-w-md px-4 py-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink-900">Forgotten password</h1>
       <p className="mt-1 text-sm text-ink-600">
-        Two ways back in. A code signs you in right now; a link lets you set a new password.
+        Two ways back in. A code signs you in right now; a link takes you straight to setting a
+        new password.
       </p>
 
       <Card className="mt-6 p-6">

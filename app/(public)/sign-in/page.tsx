@@ -6,7 +6,7 @@ import { SignInForm } from './sign-in-form';
 import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
 import { getViewer } from '@/lib/auth/session';
 import { dynamicRoute } from '@/lib/routes';
-import { Alert, Card } from '@/components/ui';
+import { Alert, ButtonLink, Card } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Sign in' };
 
@@ -30,7 +30,24 @@ export default async function SignInPage({
 }) {
   const params = await searchParams;
   const viewer = await getViewer();
-  if (viewer) redirect(dynamicRoute(safeRedirectPath(params.next, landingPathFor(viewer))));
+
+  if (viewer) {
+    const landing = safeRedirectPath(params.next, landingPathFor(viewer));
+
+    // Someone already signed in has no business on this page and is sent on —
+    // except when a link has just failed. /auth/confirm and /auth/callback
+    // report failure by landing here, and bouncing a signed-in reader straight
+    // to their dashboard swallowed the reason: a dead reset link looked exactly
+    // like a working sign-in link.
+    if (!params.error) redirect(dynamicRoute(landing));
+
+    return (
+      <SignedInLinkFailure
+        email={viewer.email ?? null}
+        landing={landing}
+      />
+    );
+  }
 
   const next = safeRedirectPath(params.next, '/');
 
@@ -60,6 +77,52 @@ export default async function SignInPage({
           Create one
         </Link>
       </p>
+    </div>
+  );
+}
+
+/**
+ * A link failed for someone who is signed in anyway — most often a reset link
+ * cancelled by a sign-in code they asked for afterwards. Nothing is lost, so
+ * say that, and offer the thing they were probably trying to do.
+ */
+function SignedInLinkFailure({ email, landing }: { email: string | null; landing: string }) {
+  return (
+    <div className="mx-auto w-full max-w-md px-4 py-12">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink-900">That link did not work</h1>
+
+      <div className="mt-4">
+        <Alert tone="warn">
+          It has expired, been used already, or been replaced by a newer email. Each new code or
+          reset link cancels the one before it.
+        </Alert>
+      </div>
+
+      <Card className="mt-6 p-6">
+        <p className="text-sm text-ink-600">
+          You are still signed in
+          {email ? (
+            <>
+              {' '}
+              as <span className="font-medium text-ink-900">{email}</span>
+            </>
+          ) : null}
+          , so you do not need the link. If you meant to change your password, you can do it now.
+        </p>
+
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+          <ButtonLink
+            href={dynamicRoute(`/update-password?next=${encodeURIComponent(landing)}`)}
+            size="lg"
+            className="flex-1"
+          >
+            Set a new password
+          </ButtonLink>
+          <ButtonLink href={dynamicRoute(landing)} tone="secondary" size="lg" className="flex-1">
+            Continue
+          </ButtonLink>
+        </div>
+      </Card>
     </div>
   );
 }

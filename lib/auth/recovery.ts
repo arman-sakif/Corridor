@@ -16,11 +16,17 @@ import { loginCodeSchema, recoveryRequestSchema, updatePasswordSchema } from '@/
 /**
  * Getting back into an account, two ways.
  *
- * A code signs you straight in. A link takes you to a page where you set a new
- * password. Both start the same way — `generateLink` mints one credential that
- * carries both a six-digit code and a hashed token — and both are delivered
- * through notify(), so the email comes from our domain in our wording rather
- * than from Supabase's default sender.
+ * A code signs you straight in, then offers to set a new password. A link
+ * takes you directly to that page. Both start the same way — `generateLink`
+ * mints one credential that carries both a code and a hashed token — and both
+ * are delivered through notify(), so the email comes from our domain in our
+ * wording rather than from Supabase's default sender.
+ *
+ * One credential means one live email. GoTrue keeps a single recovery token
+ * per account, so every request cancels whatever the previous email carried:
+ * ask for a link and then a code, and the link is dead. The form and both
+ * emails say so, because a reader who tries "both, to be safe" otherwise opens
+ * the first email and gets told it has expired.
  *
  * The thing to keep hold of while editing this file: none of it may reveal
  * whether an address has an account. `signInWithPassword` is deliberately
@@ -40,11 +46,13 @@ export async function requestRecovery(_prev: FormState, formData: FormData): Pro
   if (!parsed.ok) return parsed.state;
 
   const { email, method } = parsed.data;
+  const ref = emailRef(email);
 
   // Counted before the account is looked up, and counted for addresses that
   // have no account at all. That is what makes it safe to say out loud that
   // someone has hit the limit: the answer is the same either way.
   if (!(await underRateLimit(email))) {
+    console.info('[recovery] refused: rate limited', { ref, method });
     return fail(
       'That is three requests for this address within the hour. Wait a little, or look again for the last email — it may already be in your spam folder.',
     );
@@ -69,7 +77,21 @@ export async function requestRecovery(_prev: FormState, formData: FormData): Pro
 
   // Almost always "that user does not exist". Nothing to do, and nothing to
   // say — the caller gets the same sentence as a real send.
-  if (error || !data.properties) return succeed(SENT);
+  //
+  // The log is what the reader of the screen cannot have: which of the two
+  // happened. It names the request by `ref`, never by address, and the reason
+  // by GoTrue's code rather than its message, which can quote the address.
+  if (error || !data.properties) {
+    console.info('[recovery] no email sent: account not found or link refused', {
+      ref,
+      method,
+      reason: error ? (error.code ?? error.status) : 'no link properties',
+    });
+    return succeed(SENT);
+  }
+
+  // Whether Resend then accepts it is notify()'s line to log, straight after.
+  console.info('[recovery] account found, sending', { ref, method });
 
   if (method === 'code') {
     await notify({
@@ -79,7 +101,9 @@ export async function requestRecovery(_prev: FormState, formData: FormData): Pro
       body: [
         `Your sign-in code is ${data.properties.email_otp}.`,
         '',
-        'Enter it on the Corridor screen you left open. It expires in an hour.',
+        'Enter it on the Corridor screen you left open. It expires in an hour,',
+        'or as soon as you ask for another code or a reset link.',
+        '',
         'If you did not ask for this you can ignore this email — nobody can get',
         'into your account without the code.',
       ].join('\n'),
@@ -97,7 +121,8 @@ export async function requestRecovery(_prev: FormState, formData: FormData): Pro
       to: [email],
       subject: 'Reset your Corridor password',
       body: [
-        'Open the link below to choose a new password. It expires in an hour.',
+        'Open the link below to choose a new password. It expires in an hour,',
+        'or as soon as you ask for another link or a sign-in code.',
         '',
         'If you did not ask for this you can ignore this email. Your password',
         'stays as it is until someone opens the link.',
@@ -133,7 +158,14 @@ export async function verifyLoginCode(_prev: FormState, formData: FormData): Pro
 
   const viewer = await getViewer();
   const fallback = viewer ? landingPathFor(viewer) : '/';
-  redirect(dynamicRoute(safeRedirectPath(parsed.data.next, fallback)));
+  const destination = safeRedirectPath(parsed.data.next, fallback);
+
+  // Signed in, but still without a password they know — which is why they
+  // came. Stopping here left them inside and none the wiser, so offer to set
+  // one; the page carries a "skip" through to where they were going.
+  redirect(
+    dynamicRoute(`/update-password?via=code&next=${encodeURIComponent(destination)}`),
+  );
 }
 
 export async function updatePassword(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -173,7 +205,7 @@ export async function updatePassword(_prev: FormState, formData: FormData): Prom
  */
 async function underRateLimit(email: string): Promise<boolean> {
   const admin = createAdminClient();
-  const emailHash = createHash('sha256').update(email).digest('hex');
+  const emailHash = hashEmail(email);
   const since = new Date(Date.now() - WINDOW_MS).toISOString();
 
   // Housekeeping on the way past, so the table stays the size of an hour of
@@ -198,4 +230,18 @@ async function underRateLimit(email: string): Promise<boolean> {
 
   await admin.from('auth_recovery_requests').insert({ email_hash: emailHash });
   return true;
+}
+
+function hashEmail(email: string): string {
+  return createHash('sha256').update(email).digest('hex');
+}
+
+/**
+ * A handle for one address in the logs, so a rate limit, a lookup and a send
+ * can be tied together without writing the address down. A short prefix of the
+ * hash the rate limit already stores — it discloses nothing that table does
+ * not, and it matches that table's rows if they ever need comparing.
+ */
+function emailRef(email: string): string {
+  return hashEmail(email).slice(0, 12);
 }
