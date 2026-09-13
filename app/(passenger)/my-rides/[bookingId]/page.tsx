@@ -2,12 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { CancelRideForm } from './cancel-form';
 import { PaymentConfirmForm } from './payment-form';
 import { RatingForm } from './rating-form';
 import { ReportForm } from './report-form';
 import { BookingStatusBadge } from '@/components/booking-status';
-import { cancelBooking } from '@/lib/booking/actions';
-import { Alert, Button, ButtonLink, Card, PageHeader } from '@/components/ui';
+import { Alert, ButtonLink, Card, PageHeader } from '@/components/ui';
 import { requireViewer } from '@/lib/auth/session';
 import { reportsForBooking } from '@/lib/reports/queries';
 import { createClient } from '@/lib/supabase/server';
@@ -231,34 +231,6 @@ export default async function RideDetailPage({
           </Card>
         ) : null}
 
-        {/*
-          A rating is public and a matter of degree; a report is private, goes
-          to a person, and expects an answer. Somebody who felt unsafe should
-          not have to express that as three stars.
-        */}
-        {reportable ? (
-          <Card className="p-5">
-            <h2 className="font-semibold text-ink-900">Something went wrong?</h2>
-            <p className="mt-1 mb-4 text-sm text-ink-600">
-              Tell {booking.departure?.operator?.name} and Corridor. Both see it, and you will hear
-              what came of it.
-            </p>
-            {existingReports.length > 0 ? (
-              <div className="mb-4 space-y-2">
-                {existingReports.map((report) => (
-                  <Alert key={report.id} tone={report.status === 'open' ? 'warn' : 'good'}>
-                    {report.status === 'open'
-                      ? 'You reported this trip. It is with the operator and Corridor.'
-                      : `Closed${report.resolution ? `: ${report.resolution}` : '.'}`}
-                  </Alert>
-                ))}
-              </div>
-            ) : (
-              <ReportForm bookingId={booking.id} />
-            )}
-          </Card>
-        ) : null}
-
         {cancellable ? (
           <Card className="p-5">
             <h2 className="font-semibold text-ink-900">Change of plan?</h2>
@@ -267,13 +239,53 @@ export default async function RideDetailPage({
               it when they decide on your next request, so please only cancel if you really cannot
               travel.
             </p>
-            <form action={cancelBooking}>
-              <input type="hidden" name="booking_id" value={booking.id} />
-              <Button type="submit" tone="danger">
-                Cancel this ride
-              </Button>
-            </form>
+            <CancelRideForm
+              bookingId={booking.id}
+              operatorName={booking.departure?.operator?.name ?? null}
+              when={
+                booking.departure
+                  ? `${formatServiceDateLong(booking.departure.service_date)} at ${formatTime(booking.departure.departure_time)}`
+                  : null
+              }
+            />
           </Card>
+        ) : null}
+
+        {/*
+          A rating is public and a matter of degree; a report is private, goes
+          to a person, and expects an answer. Somebody who felt unsafe should
+          not have to express that as three stars.
+
+          Last on the page and folded away: it has to be findable by someone
+          who needs it, without inviting everyone else to press it. A report
+          already filed stays in view, since its answer is news.
+        */}
+        {reportable ? (
+          existingReports.length > 0 ? (
+            <div className="space-y-2">
+              {existingReports.map((report) => (
+                <Alert key={report.id} tone={report.status === 'open' ? 'warn' : 'good'}>
+                  {report.status === 'open'
+                    ? 'You reported this trip. It is with the operator and Corridor.'
+                    : `Report closed${report.resolution ? `: ${report.resolution}` : '.'}`}
+                </Alert>
+              ))}
+            </div>
+          ) : (
+            <details className="group pt-2">
+              <summary className="cursor-pointer list-none text-sm text-ink-500 hover:text-ink-800 [&::-webkit-details-marker]:hidden">
+                Something went wrong on this trip?{' '}
+                <span className="underline underline-offset-2">Report it</span>
+              </summary>
+              <Card className="mt-3 p-5">
+                <p className="mb-4 text-sm text-ink-600">
+                  Tell {booking.departure?.operator?.name} and Corridor. Both see it, and you will
+                  hear what came of it.
+                </p>
+                <ReportForm bookingId={booking.id} />
+              </Card>
+            </details>
+          )
         ) : null}
       </div>
     </>
