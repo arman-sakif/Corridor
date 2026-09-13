@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireOperatorRole, requireViewer } from '@/lib/auth/session';
+import { activeMode } from '@/lib/auth/mode-session';
 import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
 import { notify } from '@/lib/notify';
 import { createClient } from '@/lib/supabase/server';
@@ -96,6 +97,10 @@ export async function requestIncityRide(
   if (!parsed.ok) return parsed.state;
 
   const viewer = await requireViewer(`/my-rides/${parsed.data.booking_id}/onward`);
+
+  if ((await activeMode(viewer)) !== 'passenger') {
+    return fail('Local rides are booked from your passenger account. Switch to it from the header and try again.');
+  }
 
   // The in-city operator needs to reach them the same way an intercity one
   // does, and for the same reason.

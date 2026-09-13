@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
-import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
+import { afterSignIn, homePath } from '@/lib/auth/mode-session';
+import { safeRedirectPath } from '@/lib/auth/routing';
 import { getViewer, requireViewer } from '@/lib/auth/session';
 import { dynamicRoute } from '@/lib/routes';
 import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
@@ -156,9 +157,12 @@ export async function verifyLoginCode(_prev: FormState, formData: FormData): Pro
     );
   }
 
+  // Signing in by code is still signing in: someone with more than one account
+  // type is asked which, once their new password is set or skipped.
   const viewer = await getViewer();
-  const fallback = viewer ? landingPathFor(viewer) : '/';
-  const destination = safeRedirectPath(parsed.data.next, fallback);
+  const destination = viewer
+    ? await afterSignIn(viewer, parsed.data.next)
+    : safeRedirectPath(parsed.data.next, '/');
 
   // Signed in, but still without a password they know — which is why they
   // came. Stopping here left them inside and none the wiser, so offer to set
@@ -189,7 +193,11 @@ export async function updatePassword(_prev: FormState, formData: FormData): Prom
   }
 
   revalidatePath('/', 'layout');
-  redirect(dynamicRoute(safeRedirectPath(parsed.data.next, landingPathFor(viewer))));
+  const next =
+    parsed.data.next && parsed.data.next !== '/'
+      ? safeRedirectPath(parsed.data.next, '/')
+      : await homePath(viewer);
+  redirect(dynamicRoute(next));
 }
 
 /**

@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { SignUpForm } from './sign-up-form';
-import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
+import { homePath } from '@/lib/auth/mode-session';
+import { safeRedirectPath } from '@/lib/auth/routing';
 import { getViewer } from '@/lib/auth/session';
 import { dynamicRoute } from '@/lib/routes';
 import { Card } from '@/components/ui';
@@ -17,7 +18,7 @@ export default async function SignUpPage({
 }) {
   const params = await searchParams;
   const viewer = await getViewer();
-  if (viewer) redirect(dynamicRoute(safeRedirectPath(params.next, landingPathFor(viewer))));
+  if (viewer) redirect(dynamicRoute(await homePath(viewer, params.next)));
 
   const next = safeRedirectPath(params.next, '/');
 

@@ -563,8 +563,17 @@ export interface Database {
           photo_url: string | null;
           accommodation_notes: string | null;
           platform_role: PlatformRole | null;
+          passenger_enabled: boolean;
+          drives_enabled: boolean;
         } & Timestamps,
-        'full_name' | 'phone' | 'gender' | 'photo_url' | 'accommodation_notes' | 'platform_role',
+        | 'full_name'
+        | 'phone'
+        | 'gender'
+        | 'photo_url'
+        | 'accommodation_notes'
+        | 'platform_role'
+        | 'passenger_enabled'
+        | 'drives_enabled',
         'created_at' | 'updated_at'
       >;
       operators: Table<
@@ -961,6 +970,10 @@ export interface Database {
       phone_in_use: {
         Args: { p_phone: string; p_exclude?: string | null };
         Returns: boolean;
+      };
+      set_account_mode: {
+        Args: { p_mode: 'passenger' | 'driver'; p_enabled: boolean };
+        Returns: undefined;
       };
     };
     Enums: {

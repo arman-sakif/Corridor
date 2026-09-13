@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { SignInForm } from './sign-in-form';
-import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
+import { homePath } from '@/lib/auth/mode-session';
+import { safeRedirectPath } from '@/lib/auth/routing';
 import { getViewer } from '@/lib/auth/session';
 import { dynamicRoute } from '@/lib/routes';
 import { Alert, ButtonLink, Card } from '@/components/ui';
@@ -32,7 +33,7 @@ export default async function SignInPage({
   const viewer = await getViewer();
 
   if (viewer) {
-    const landing = safeRedirectPath(params.next, landingPathFor(viewer));
+    const landing = await homePath(viewer, params.next);
 
     // Someone already signed in has no business on this page and is sent on —
     // except when a link has just failed. /auth/confirm and /auth/callback

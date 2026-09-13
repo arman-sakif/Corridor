@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 
+import { activeMode } from '@/lib/auth/mode-session';
+import { getViewer } from '@/lib/auth/session';
+
 import './globals.css';
 
 /**
@@ -30,9 +33,14 @@ export const viewport: Viewport = {
   themeColor: '#1e3a5f',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The palette follows the account type in use; see globals.css. Signed out,
+  // or not yet chosen, reads as passenger — the public face of the product.
+  const viewer = await getViewer();
+  const mode = viewer ? await activeMode(viewer) : null;
+
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} data-mode={mode ?? 'passenger'}>
       <body className="min-h-dvh antialiased">{children}</body>
     </html>
   );

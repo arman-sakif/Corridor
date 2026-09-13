@@ -4,6 +4,7 @@ import { PastDueBanner } from '@/components/past-due-banner';
 import { SiteHeader } from '@/components/site-header';
 import { NavTabs } from '@/components/nav';
 import { requireViewer } from '@/lib/auth/session';
+import { requireMode } from '@/lib/auth/mode-session';
 import { createClient } from '@/lib/supabase/server';
 import { one } from '@/lib/supabase/rows';
 import { Alert, Badge } from '@/components/ui';
@@ -55,6 +56,10 @@ export default async function OperatorLayout({
     (m) => m.operator_id === operatorId && (m.role === 'owner' || m.role === 'staff'),
   );
   if (!membership) notFound();
+
+  // A member of this business, but perhaps signed in as its driver or as a
+  // passenger right now — then this dashboard asks them to switch first.
+  await requireMode('operator', `/operator/${operatorId}`);
 
   const operator = membership.operator;
   const tabs = operator?.type === 'incity' ? incityTabs : intercityTabs;

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
+import { afterSignIn } from '@/lib/auth/mode-session';
+import { safeRedirectPath } from '@/lib/auth/routing';
 import { getViewer, profileIsComplete } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
 
@@ -33,10 +34,9 @@ export async function GET(request: NextRequest) {
   // rather than guessing.
   if (!viewer) return NextResponse.redirect(`${origin}${safeRedirectPath(requested, '/')}`);
 
-  // Landing by role, the same way the password path does. An operator or an
-  // admin arriving through Google used to be dropped on the passenger home
-  // page and left to find their own dashboard.
-  const next = safeRedirectPath(requested, landingPathFor(viewer));
+  // Signing in through Google is signing in like any other: one account type
+  // goes straight to its home, more than one is asked which.
+  const next = await afterSignIn(viewer, requested);
 
   // Google supplies a name and never a phone number, and an operator cannot
   // approve a passenger they have no way to reach. The password signup form

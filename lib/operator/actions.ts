@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
 import { requireOperatorRole, requireViewer } from '@/lib/auth/session';
+import { rememberMode } from '@/lib/auth/mode-session';
 import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -44,7 +45,17 @@ export async function applyAsOperator(_prev: FormState, formData: FormData): Pro
     return fail('We could not submit that application. Try again in a moment.');
   }
 
-  revalidatePath('/for-operators');
+  // They applied as a business. An operator account starts without passenger
+  // unless the person has already booked as one — then it stays, so no ride
+  // they hold goes out of sight. Either way Profile can switch it back.
+  const { count: booked } = await supabase
+    .from('bookings')
+    .select('id', { count: 'exact', head: true })
+    .eq('passenger_id', viewer.userId);
+  if (!booked) await supabase.rpc('set_account_mode', { p_mode: 'passenger', p_enabled: false });
+  await rememberMode('operator');
+
+  revalidatePath('/', 'layout');
   redirect(`/operator/${data.id}`);
 }
 

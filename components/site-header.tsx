@@ -1,6 +1,10 @@
 import Link from 'next/link';
 
+import { AccountPicker } from '@/components/account-picker';
+import { SwitchAccount } from '@/components/switch-account';
 import { signOut } from '@/lib/auth/actions';
+import { activeMode } from '@/lib/auth/mode-session';
+import { MODE_LABEL, availableModes, homeFor } from '@/lib/auth/modes';
 import { getViewer } from '@/lib/auth/session';
 import { unreadCount } from '@/lib/notifications/queries';
 import { ButtonLink } from '@/components/ui';
@@ -9,47 +13,58 @@ import { IconBell, IconLogo } from '@/components/icons';
 import { dynamicRoute } from '@/lib/routes';
 
 /**
- * One header across every surface. The links a person sees are the surfaces
- * they actually have: a passenger who also drives for an operator gets both,
- * and nobody gets a dashboard they cannot open.
+ * One header, shaped by the account type in use. A passenger sees their rides,
+ * an operator their business, a driver their trips, an admin the console — and
+ * nobody sees another type's links, even when they have that type too. Switch
+ * is how they get there.
  */
 export async function SiteHeader() {
   const viewer = await getViewer();
+  const mode = viewer ? await activeMode(viewer) : null;
+  const modes = viewer ? availableModes(viewer) : [];
 
   const staffing = viewer?.memberships.filter((m) => m.role === 'owner' || m.role === 'staff') ?? [];
-  const drives = viewer?.memberships.some((m) => m.role === 'driver') ?? false;
   const unread = viewer ? await unreadCount(viewer.userId) : 0;
+  const home = viewer && mode ? homeFor(viewer, mode) : '/';
 
   return (
     <header className="sticky top-0 z-40 border-b border-ink-200 bg-white/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
         <Link
-          href="/"
+          href={dynamicRoute(home)}
           className="flex shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-lg font-semibold tracking-tight text-ink-900 transition-colors hover:text-brand-700"
         >
           <IconLogo className="text-xl text-brand-600" />
           Corridor
         </Link>
 
+        {/* Which hat, at a glance — only worth saying to someone with more than one. */}
+        {mode && modes.length > 1 ? (
+          <span className="hidden shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700 ring-1 ring-brand-200 sm:inline-flex">
+            {MODE_LABEL[mode]}
+          </span>
+        ) : null}
+
         {/*
-          A passenger who also drives for two operators has five links here,
-          and on a phone that is wider than the screen. Scrolling the nav keeps
-          every one of them reachable — sign out most of all, which sat off the
-          right-hand edge with no way to get to it.
+          A person with several links here on a phone has a nav wider than the
+          screen. Scrolling it keeps every link reachable — sign out most of
+          all, which once sat off the right-hand edge with no way to reach it.
         */}
         <nav className="ml-auto flex items-center gap-0.5 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {viewer ? (
             <>
-              <NavLink href="/my-rides">My rides</NavLink>
+              {mode === 'passenger' ? <NavLink href="/my-rides">My rides</NavLink> : null}
 
-              {staffing.map((membership) => (
-                <NavLink key={membership.operator_id} href={`/operator/${membership.operator_id}`}>
-                  {membership.operator?.name ?? 'Operator'}
-                </NavLink>
-              ))}
+              {mode === 'operator'
+                ? staffing.map((membership) => (
+                    <NavLink key={membership.operator_id} href={`/operator/${membership.operator_id}`}>
+                      {membership.operator?.name ?? 'Operator'}
+                    </NavLink>
+                  ))
+                : null}
 
-              {drives ? <NavLink href="/driver">Driving</NavLink> : null}
-              {viewer.isAdmin ? <NavLink href="/admin">Admin</NavLink> : null}
+              {mode === 'driver' ? <NavLink href="/driver">Driving</NavLink> : null}
+              {mode === 'admin' ? <NavLink href="/admin">Admin</NavLink> : null}
 
               {/*
                 The count is the point. Email reaches one address until a
@@ -73,6 +88,12 @@ export async function SiteHeader() {
               </Link>
               <NavLink href="/feedback">Tell us</NavLink>
               <NavLink href="/profile">Profile</NavLink>
+
+              {modes.length > 1 ? (
+                <SwitchAccount label={mode ? 'Switch' : 'Choose account'}>
+                  <AccountPicker modes={modes} current={mode} />
+                </SwitchAccount>
+              ) : null}
 
               <form action={signOut} className="shrink-0">
                 <button

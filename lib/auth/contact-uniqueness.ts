@@ -9,9 +9,9 @@ import { enforceUniqueContact } from '@/lib/supabase/env';
  * Email is already settled by Supabase: `auth.users.email` is unique, so an
  * address can only ever be one account. Note that this is one account, not one
  * account *per role* — and that is right. A person who drives for one operator
- * and rides home with another is one person, and both `landingPathFor` and the
- * site header are built around exactly that overlap. Making them hold two
- * logins would be a worse product, not a safer one.
+ * and rides home with another is one person, with one login and several account
+ * types to choose between (`lib/auth/modes.ts`). Making them hold two logins
+ * would be a worse product, not a safer one.
  *
  * Phone is the gap. `profiles.phone` is bare nullable text with no constraint,
  * so nothing today stops ten accounts sharing a number — which matters,

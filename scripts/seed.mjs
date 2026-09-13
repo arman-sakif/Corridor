@@ -141,7 +141,16 @@ function passengerEmail(name) {
 
 /* ------------------------------------------------------------------- seed */
 
-async function ensureUser(email, fullName, { phone = null, gender = null, notes = null } = {}) {
+/**
+ * `passenger: false` for owners and drivers: an operator or driver account
+ * starts without passenger, as a real one does (see 20260830000029). The
+ * service role is the one caller the account-type guard lets through.
+ */
+async function ensureUser(
+  email,
+  fullName,
+  { phone = null, gender = null, notes = null, passenger = true } = {},
+) {
   const { data: existing } = await db.auth.admin.listUsers({ perPage: 1000 });
   let user = existing?.users.find((u) => u.email === email);
 
@@ -163,6 +172,7 @@ async function ensureUser(email, fullName, { phone = null, gender = null, notes 
       phone: phone ?? `519-555-${String(between(1000, 9999))}`,
       gender,
       accommodation_notes: notes,
+      passenger_enabled: passenger,
     })
     .eq('id', user.id);
 
@@ -209,7 +219,10 @@ async function seedAll() {
   const operatorIdBySlug = {};
 
   for (const op of OPERATORS) {
-    const ownerId = await ensureUser(op.ownerEmail, op.ownerName, { phone: op.phone });
+    const ownerId = await ensureUser(op.ownerEmail, op.ownerName, {
+      phone: op.phone,
+      passenger: false,
+    });
 
     /* ---- operator ----------------------------------------------------- */
     const { data: operator, error: opError } = await db
@@ -241,7 +254,7 @@ async function seedAll() {
     /* ---- drivers ------------------------------------------------------- */
     const driverIds = [];
     for (const [email, name] of op.drivers) {
-      const driverId = await ensureUser(email, name);
+      const driverId = await ensureUser(email, name, { passenger: false });
       await db
         .from('operator_members')
         .upsert(
@@ -418,6 +431,7 @@ async function seedAll() {
   /* ---- in-city (Phase 6 tables) --------------------------------------- */
   const incityOwner = await ensureUser(INCITY_OPERATOR.ownerEmail, INCITY_OPERATOR.ownerName, {
     phone: INCITY_OPERATOR.phone,
+    passenger: false,
   });
   const { data: incityOp, error: incityError } = await db
     .from('operators')

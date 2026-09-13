@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
 import { requireViewer } from '@/lib/auth/session';
+import { activeMode } from '@/lib/auth/mode-session';
 import { fail, parseForm, type FormState } from '@/lib/forms';
 import { createClient } from '@/lib/supabase/server';
 import { notify } from '@/lib/notify';
@@ -22,6 +23,13 @@ export async function requestSeat(_prev: FormState, formData: FormData): Promise
   if (!parsed.ok) return parsed.state;
 
   const viewer = await requireViewer(`/departures/${parsed.data.departure_id}`);
+
+  // A seat is booked from a passenger account. An operator browsing search in
+  // their operator account is shown a switch instead of this form, so this is
+  // the backstop for a stale page.
+  if ((await activeMode(viewer)) !== 'passenger') {
+    return fail('Seats are requested from your passenger account. Switch to it from the header and try again.');
+  }
 
   if (!viewer.profile?.full_name || !viewer.profile.phone) {
     return fail('Add your name and phone number to your profile before requesting a seat.');

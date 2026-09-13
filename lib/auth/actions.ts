@@ -3,7 +3,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
-import { landingPathFor, safeRedirectPath } from '@/lib/auth/routing';
+import { afterSignIn, forgetMode } from '@/lib/auth/mode-session';
+import { safeRedirectPath } from '@/lib/auth/routing';
 import { dynamicRoute, externalUrl } from '@/lib/routes';
 import { getViewer } from '@/lib/auth/session';
 import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
@@ -31,9 +32,11 @@ export async function signInWithPassword(
     return fail('That email and password do not match an account.');
   }
 
+  // Someone with more than one account type is asked which to use.
   const viewer = await getViewer();
-  const fallback = viewer ? landingPathFor(viewer) : '/';
-  redirect(dynamicRoute(safeRedirectPath(parsed.data.next, fallback)));
+  redirect(
+    dynamicRoute(viewer ? await afterSignIn(viewer, parsed.data.next) : safeRedirectPath(parsed.data.next, '/')),
+  );
 }
 
 export async function signUpWithPassword(
@@ -78,8 +81,9 @@ export async function signUpWithPassword(
   // The form asked for everything an operator needs, so there is no profile
   // detour left to make — straight to wherever they were headed.
   const viewer = await getViewer();
-  const fallback = viewer ? landingPathFor(viewer) : '/';
-  redirect(dynamicRoute(safeRedirectPath(parsed.data.next, fallback)));
+  redirect(
+    dynamicRoute(viewer ? await afterSignIn(viewer, parsed.data.next) : safeRedirectPath(parsed.data.next, '/')),
+  );
 }
 
 /**
@@ -114,6 +118,8 @@ export async function signInWithGoogle(formData: FormData): Promise<void> {
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
+  // The next person on this browser starts from the picker, not from this one's choice.
+  await forgetMode();
   revalidatePath('/', 'layout');
   redirect('/');
 }

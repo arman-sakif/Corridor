@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { UpdatePasswordForm } from './update-password-form';
 import { safeRedirectPath } from '@/lib/auth/routing';
 import { requireViewer } from '@/lib/auth/session';
+import { homePath } from '@/lib/auth/mode-session';
 import { dynamicRoute } from '@/lib/routes';
 import { Card } from '@/components/ui';
 
@@ -22,7 +23,7 @@ export default async function UpdatePasswordPage({
 }) {
   const params = await searchParams;
   const viewer = await requireViewer('/update-password');
-  const next = safeRedirectPath(params.next, '/');
+  const next = params.next ? safeRedirectPath(params.next, '/') : await homePath(viewer);
 
   // Arriving from a sign-in code: they are in, but still do not know their
   // password — the reason they came. This is an offer, not a gate, so it

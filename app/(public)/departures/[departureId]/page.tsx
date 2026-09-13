@@ -7,6 +7,9 @@ import { Alert, Badge, Card, EmptyState } from '@/components/ui';
 import { IconArrowRight, IconClock, IconRoute, IconSeat } from '@/components/icons';
 import { departureBoardings } from '@/lib/booking/search';
 import { getViewer, profileIsComplete } from '@/lib/auth/session';
+import { chooseAccountMode } from '@/lib/auth/mode-actions';
+import { activeMode } from '@/lib/auth/mode-session';
+import { availableModes } from '@/lib/auth/modes';
 import { dynamicRoute } from '@/lib/routes';
 import { formatServiceDateLong, formatTime, torontoInstant } from '@/lib/time';
 
@@ -27,6 +30,10 @@ export default async function DeparturePage({
   ]);
 
   if (!departure) notFound();
+
+  // Anyone can look at a departure; a seat is requested from a passenger account.
+  const mode = viewer ? await activeMode(viewer) : null;
+  const hasPassenger = viewer ? availableModes(viewer).includes('passenger') : false;
 
   const hasLeft = torontoInstant(departure.serviceDate, departure.departureTime) <= new Date();
   const available = departure.boardings.filter((boarding) => boarding.seatsLeft > 0);
@@ -154,6 +161,40 @@ export default async function DeparturePage({
               Sign in or create an account
               <IconArrowRight className="transition-transform group-hover:translate-x-0.5" />
             </Link>
+          </Card>
+        ) : mode !== 'passenger' ? (
+          <Card className="p-5">
+            <Alert tone="info">
+              {hasPassenger
+                ? 'Seats are requested from your passenger account. Switch to it to carry on.'
+                : 'Seats are requested from a passenger account, and yours is switched off. Turn it on in your profile to book.'}
+            </Alert>
+            {hasPassenger ? (
+              <form action={chooseAccountMode} className="mt-4">
+                <input type="hidden" name="mode" value="passenger" />
+                <input
+                  type="hidden"
+                  name="next"
+                  value={`/departures/${departureId}?from=${query.from ?? ''}&to=${query.to ?? ''}`}
+                />
+                <button
+                  type="submit"
+                  data-mode="passenger"
+                  className="group inline-flex items-center gap-1.5 font-medium text-brand-600 transition-colors hover:text-brand-700"
+                >
+                  Switch to passenger
+                  <IconArrowRight className="transition-transform group-hover:translate-x-0.5" />
+                </button>
+              </form>
+            ) : (
+              <Link
+                href="/profile"
+                className="group mt-4 inline-flex items-center gap-1.5 font-medium text-brand-600 transition-colors hover:text-brand-700"
+              >
+                Open your profile
+                <IconArrowRight className="transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            )}
           </Card>
         ) : !profileIsComplete(viewer.profile) ? (
           <Card className="p-5">

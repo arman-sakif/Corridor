@@ -1,6 +1,7 @@
 import { SiteHeader } from '@/components/site-header';
 import { NavTabs } from '@/components/nav';
 import { requireAdmin } from '@/lib/auth/session';
+import { requireMode } from '@/lib/auth/mode-session';
 
 const tabs = [
   { href: '/admin', label: 'Operators' },
@@ -11,7 +12,9 @@ const tabs = [
 ] as const;
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  // Being an admin is the permission; being in the admin account is the choice.
   await requireAdmin();
+  await requireMode('admin', '/admin');
 
   return (
     <div className="flex min-h-dvh flex-col">

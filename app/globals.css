@@ -71,6 +71,71 @@
   --shadow-hero: 0 4px 12px oklch(0.196 0.021 258 / 0.06), 0 20px 48px oklch(0.196 0.021 258 / 0.10);
 }
 
+/*
+ * One palette per account type.
+ *
+ * Passenger keeps the transit blue above. The others redefine the brand scale
+ * and nothing else, so every `bg-brand-600` and `text-brand-700` in the app
+ * follows whichever type is active — set as `data-mode` on <html> — without a
+ * component knowing about it. The picker sets it per button, so each choice
+ * wears its own colour before it is chosen.
+ *
+ * Operator is violet, driver amber — legible in a van in daylight, and dark
+ * enough at 600 to carry white text — and admin a quiet slate.
+ */
+/* Restated so a passenger button inside another type's page is still blue. */
+[data-mode='passenger'] {
+  --color-brand-50: oklch(0.972 0.014 232);
+  --color-brand-100: oklch(0.934 0.034 232);
+  --color-brand-200: oklch(0.872 0.062 232);
+  --color-brand-300: oklch(0.782 0.098 234);
+  --color-brand-400: oklch(0.678 0.128 236);
+  --color-brand-500: oklch(0.586 0.146 240);
+  --color-brand-600: oklch(0.508 0.148 244);
+  --color-brand-700: oklch(0.432 0.132 246);
+  --color-brand-800: oklch(0.352 0.104 248);
+  --color-brand-900: oklch(0.282 0.078 250);
+}
+
+[data-mode='operator'] {
+  --color-brand-50: oklch(0.972 0.016 300);
+  --color-brand-100: oklch(0.936 0.038 300);
+  --color-brand-200: oklch(0.878 0.07 300);
+  --color-brand-300: oklch(0.79 0.11 300);
+  --color-brand-400: oklch(0.69 0.145 298);
+  --color-brand-500: oklch(0.6 0.165 296);
+  --color-brand-600: oklch(0.52 0.17 294);
+  --color-brand-700: oklch(0.445 0.155 293);
+  --color-brand-800: oklch(0.365 0.125 292);
+  --color-brand-900: oklch(0.29 0.09 292);
+}
+
+[data-mode='driver'] {
+  --color-brand-50: oklch(0.978 0.03 85);
+  --color-brand-100: oklch(0.945 0.065 83);
+  --color-brand-200: oklch(0.9 0.105 80);
+  --color-brand-300: oklch(0.84 0.14 76);
+  --color-brand-400: oklch(0.76 0.16 70);
+  --color-brand-500: oklch(0.66 0.165 60);
+  --color-brand-600: oklch(0.555 0.155 52);
+  --color-brand-700: oklch(0.48 0.135 48);
+  --color-brand-800: oklch(0.4 0.11 46);
+  --color-brand-900: oklch(0.33 0.085 44);
+}
+
+[data-mode='admin'] {
+  --color-brand-50: oklch(0.975 0.004 255);
+  --color-brand-100: oklch(0.94 0.008 255);
+  --color-brand-200: oklch(0.885 0.012 255);
+  --color-brand-300: oklch(0.8 0.018 255);
+  --color-brand-400: oklch(0.68 0.024 255);
+  --color-brand-500: oklch(0.56 0.028 255);
+  --color-brand-600: oklch(0.45 0.03 257);
+  --color-brand-700: oklch(0.38 0.03 258);
+  --color-brand-800: oklch(0.31 0.028 260);
+  --color-brand-900: oklch(0.25 0.025 262);
+}
+
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
