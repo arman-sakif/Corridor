@@ -31,10 +31,11 @@ Everything is one Next.js codebase. There is no separate API server.
               Next.js App Router (Vercel)
               ├── Server Components — reads, rendered on the server
               ├── Server Actions    — every mutation, Zod-validated
-              └── Route Handlers    — manifest CSV, webhooks
+              ├── Route Handlers    — manifest CSV, daily job, auth callbacks
+              └── proxy.ts          — refreshes the session on every request
                          │
                          ▼
-              Supabase (Postgres + Auth + RLS + Storage)
+              Supabase (Postgres + Auth + RLS)
               ├── tables with RLS on by default
               ├── Postgres functions — transactional logic (RPC)
               └── auth.users ──trigger──▶ profiles
@@ -48,7 +49,7 @@ Everything is one Next.js codebase. There is no separate API server.
 | **Client components** | Display and input only. They never decide a price, a seat count, or a status. |
 | **Server Components** | Read data with the caller's session, so RLS applies. |
 | **Server Actions** | Every mutation. Parse input with Zod at the boundary, re-derive anything that matters, then write. |
-| **Route Handlers** | Non-HTML responses — the manifest CSV, later webhooks. |
+| **Route Handlers** | Non-HTML responses — the manifest CSV, the daily job, the two auth callbacks. |
 | **Postgres functions** | Anything that must be atomic. Called via RPC. |
 | **RLS** | The backstop. Assume every other layer has a bug. |
 
@@ -67,9 +68,17 @@ that contention is refused, and that passengers on disjoint legs are *not*, sinc
 a lock held too coarsely would pass the first check while silently collapsing
 per-leg capacity into per-departure capacity.
 
-Phase 7 adds Android and iOS. That is the reason business logic stays
-server-side and in the database: the mobile apps re-use it rather than
-reimplementing it.
+Reads have one more rule. Every page, layout, route handler and query module
+unwraps a PostgREST result through `rows()`, `one()` or `count()`
+(`lib/supabase/rows.ts`), which throw on a refused query. PostgREST answers a
+refused query with an error and no data, and `data ?? []` turns that into a
+calm empty page — which is exactly how a complaints page told two operators
+they had none. A thrown read reaches `app/error.tsx` and the server log
+instead. RLS is untouched: it hides rows by returning fewer, never by erroring.
+
+Phase 7 was to add Android and iOS; subscription tracking is built and the
+apps are not started. They are the reason business logic stays server-side and
+in the database: the mobile apps re-use it rather than reimplementing it.
 
 ---
 
@@ -77,21 +86,30 @@ reimplementing it.
 
 ```
 app/
-  (public)/      search, departure detail, operator profiles, sign in
-  (passenger)/   my rides, booking detail, profile, ratings
-  (operator)/    setup, bookings queue, departures, fleet, team
-  (driver)/      today, manifest
-  (admin)/       operator vetting, cities, subscriptions
+  (public)/      search, departure detail, operator profiles, sign in and up,
+                 the "Log in as" picker, recovery
+  (passenger)/   my rides and history, booking detail, the local ride,
+                 notifications, profile, reports, feedback
+  (operator)/    setup, requests and history, departures, fleet, team, zones,
+                 in-city requests, complaints, billing
+  (driver)/      trips, manifest
+  (admin)/       operator vetting, cities, subscriptions, complaints, feedback
   api/           manifest CSV export, the daily housekeeping job
+  auth/          PKCE callback and token-hash confirm
 components/      presentational primitives and shared form plumbing
 lib/
-  supabase/      clients (request-scoped, browser, service-role), types
-  auth/          session, role routing, auth actions
-  booking/       fares, capacity, search, booking and departure-day actions
+  supabase/      clients (request-scoped, browser, service-role), types,
+                 rows()/one()/count()
+  auth/          session, account types, sign-in, recovery
+  booking/       fares, capacity, seat map, ride lists, search, booking and
+                 departure-day actions
   operator/      setup actions
   incity/        the in-city add-on — isolated
+  notifications/ the in-app list
+  reports/       complaints and feedback
   validation/    zod schemas
   notify.ts      the one seam every notification goes through
+proxy.ts         Next 16's middleware — session refresh
 supabase/
   migrations/    numbered SQL — schema, RLS, and every Postgres function
   tests/         the migrations, run against a real Postgres
@@ -133,7 +151,14 @@ synonyms.
 | **Hold** | A booking awaiting operator approval. Occupies capacity. Expires in 1 hour. |
 | **Boarding** | One sellable stop-pair on a departure for a searched city pair. Several may exist for the same journey, priced independently. |
 | **Manifest** | The passenger list for one vehicle on one departure. |
-| **Red flag** | An operator's negative mark on a passenger after a trip. |
+| **Red flag** | An operator's negative mark on a passenger after a trip. Platform-wide, never shown to the passenger. Raised by a manager or by the driver who was on the trip. |
+| **Rating** | 1–5 in both directions. A passenger's rating of an operator is public. An operator's rating of a passenger is seen only as an average at approval time, and never by that passenger. |
+| **Zone** | A named area an `incity` operator drops off in, at one flat price. A name and a number — no geography. |
+| **Local ride** | An in-city add-on to a confirmed intercity booking: pickup point → zone, approved separately by the in-city operator. |
+| **Report** | A passenger's complaint about a *trip*, never a person. Reaches the operator and a platform admin; either closes it. |
+| **Feedback** | Product feedback from anyone signed in. Admins only. |
+| **Notification** | An in-app row plus an email. Credentials are emailed and never filed. |
+| **Account type** | Which hat a signed-in person is wearing: passenger, driver, operator or admin. See §6. |
 
 The full schema is in [`supabase/migrations`](../supabase/migrations). A few
 shape decisions worth stating outright:
@@ -297,10 +322,37 @@ repeat offenders.
 
 | Role | Can do |
 |---|---|
-| **Passenger** | Search, request a seat, cancel, view rides, confirm payment, rate the operator. |
-| **Driver** | See assigned departures, view and download the manifest, mark no-shows, confirm payment received. |
-| **Operator staff/owner** | Everything for their own operator: stops, routes, fares, schedules, vehicles, drivers, approve/decline, assign vehicles, view passenger history, raise red flags. |
-| **Platform admin** | Vet and activate operators, manage cities, manage subscriptions, suspend operators. |
+| **Passenger** | Search, request a seat, cancel, view rides and history, confirm payment, rate the operator, add a local ride, report a trip, send feedback. |
+| **Driver** | See assigned departures, view and download the manifest, mark no-shows, confirm payment received, rate or flag a passenger on a trip they drove. |
+| **Operator staff/owner** | Everything for their own operator: stops, routes, fares, schedules, vehicles, team and invites, approve/decline, assign vehicles, view passenger history, rate passengers, raise red flags, complaints, billing. |
+| **Platform admin** | Vet and activate operators, manage cities, manage subscriptions, suspend operators, read every complaint and all feedback. |
+
+### Account types
+
+One person has one login. What they *can* be comes from what they are —
+`platform_role` for admin, `operator_members` for operator (owner or staff) and
+for driver — plus two switches on `profiles`, each only downstream of a role
+already held:
+
+- `passenger_enabled` — an admin or any team member may switch it. A plain
+  passenger has nothing else to be, so theirs stays on. Invited team members
+  start with it off.
+- `drives_enabled` — an owner may switch driving on for themselves. Drivers and
+  staff are added by the business, never self-made.
+
+Operator and admin are granted, never switched on. Both switches change only
+through `set_account_mode()`.
+
+Which type is **active** is a cookie, re-checked against those rules on every
+request, so a stale one — an owner who switched driving off, a driver removed
+from a team — never holds a door open. Someone with more than one type is asked
+*Log in as* at every sign-in; someone with one never sees the picker. The active
+type decides the header, the landing page, which sections open (each section's
+layout calls `requireMode()`), and the palette: passenger blue, operator
+violet, driver amber, admin slate.
+
+It is a view, not a permission. No policy reads it; the database goes on
+permitting what the person really is.
 
 Operators are **vetted manually by a platform admin**. Self-serve signup creates
 a `pending` operator that is invisible to passengers. Status changes are guarded
@@ -317,27 +369,35 @@ by a trigger, so an operator cannot activate or unsuspend itself.
 2. **Every operator-scoped query also filters by membership explicitly.** A bug
    in one layer must not leak another operator's bookings.
 3. **The service-role key is server-only** and never reaches the client bundle.
-4. **Two columns are guarded by triggers, not policies.** RLS governs rows, not
+4. **Four columns are guarded by triggers, not policies.** RLS governs rows, not
    columns, so a user permitted to update their own row is permitted to update
    every column of it. `profiles.platform_role` and `operators.status` are the
    two that must not work that way — self-granted admin and self-vetting
    respectively — and each has a `before update` trigger that refuses the
    change unless it comes from a platform admin or the service role. The
    privilege escalation this closes was live until the database tests caught
-   it.
+   it. `profiles.passenger_enabled` and `drives_enabled` *are* self-service,
+   but only within the hierarchy above, so their trigger admits only
+   `set_account_mode()`, which marks its own transaction with a local setting
+   PostgREST has no way to set.
 5. **Functions are granted deliberately.** Postgres grants `EXECUTE` to
    `PUBLIC` by default and Supabase exposes everything in `public` as an RPC
    endpoint, so a new function is internet-reachable the moment it exists.
    `20260829000008_function_grants.sql` revokes that and grants per role;
    `supabase/tests/grants.test.ts` fails the next time one is added without a
    grant.
+6. **A policy that needs another table asks a `SECURITY DEFINER` lookup.** A
+   policy's subquery runs as the caller with RLS on every table it reads, so a
+   join can vanish exactly when it matters — see §10, #16.
 
 **What an operator sees when approving:** passenger name, phone, gender if
 given, photo if given, accommodation notes, the free-text request, and platform
-history — completed rides, cancellations, red flags.
+history — completed rides, cancellations, no-shows, red flags, and the average
+rating operators who carried them have given.
 
 **What a passenger never sees:** the driver, the vehicle, or the assignment.
-Operator and time, nothing else.
+Operator and time, nothing else. Nor their red flags, nor ratings written about
+them — a rater who knows the subject is reading is a less honest rater.
 
 **Manifest download** is CSV (opens cleanly in Excel), generated server-side by
 a Route Handler, one file per vehicle per departure: pickup stop, dropoff stop,
@@ -391,12 +451,28 @@ matching algorithm, driver-posted rides, and multi-operator connecting trips
 
 ## 9. Open decisions
 
-- **Notifications.** MVP is email (Resend) plus an in-app list. Because a hold
-  expires in an hour, SMS may prove necessary for approval alerts — revisit
-  after the first operator is live. Build behind a small `notify()` abstraction
-  so adding a channel is one implementation, not a refactor. `lib/notify.ts` is
-  that seam: without a Resend key it logs rather than silently doing nothing.
-  No notifications table exists yet, so the in-app list is still unbuilt.
+- **Notifications.** Built: `notify()` in `lib/notify.ts` files an in-app row
+  and sends an email. In-app is the channel that works today — email uses
+  Resend's sandbox sender, which delivers only to the Resend account owner,
+  until a domain is verified. A refused or unconfigured send logs the whole
+  message. Credentials (`login_code`, `password_reset`) are emailed and never
+  filed; the `notification_kind` enum omits them so a slip fails at the insert.
+  Because a hold expires in an hour, SMS may prove necessary for approval
+  alerts — revisit after the first operator is live. The same SMS provider
+  would unlock phone-number sign-in, so decide both together. Adding a channel
+  is one implementation inside `notify()`, not a refactor.
+- **One phone number, one account.** Built and switched off by
+  `ENFORCE_UNIQUE_CONTACT`, so demo accounts can share a number. Turning it on
+  for good also wants the unique index sketched at the foot of
+  `20260830000017_phone_uniqueness_check.sql`. The rule is one account per
+  contact, not one per role: a driver who also rides is one person with two
+  account types.
+- **Email confirmation at signup is off.** Nothing is prepaid and every booking
+  is approved by hand, so an unproven address costs little; a click-this-link
+  step is the largest friction before a first booking. Revisit if fake signups
+  become real, with Resend as custom SMTP.
+- **Search display.** The headline price includes the airport fee. If more
+  surcharge types appear, revisit whether one number can stay honest.
 - **Departure generation.** Rolling 30-day window, generated by `/api/cron` on
   a daily Vercel schedule, and again whenever an operator saves a timetable
   entry so departures appear immediately. `generate_departures()` is
@@ -428,7 +504,7 @@ The ten mistakes most likely to be made in this codebase:
 9. Reaching for a maps or geocoding API. No coordinates are needed anywhere.
 10. Floats for money. Integer cents.
 
-Five more, learned the hard way once the schema met a real database:
+More, learned the hard way once the schema met a real database:
 
 11. **Assuming an RLS policy protects a column.** It governs rows. A user
     allowed to update their own row can reach every column of it, which is how
@@ -444,4 +520,44 @@ Five more, learned the hard way once the schema met a real database:
     RPC the caller cannot execute returns `null` data rather than throwing.
     Both read as an answer.
 15. **Unwinding a delete through a RESTRICT.** Removing an operator cannot lean
-    on the cascade; departures must go before routes.
+    on the cascade: the cascade reaches `stops` before `route_stops` is
+    cleared, and `route_stops.stop_id`, `departures.route_id` and
+    `bookings.passenger_id` all restrict. The order that works is departures →
+    schedules → routes → stops → operator → accounts, checking every error —
+    `removeOperator()` in `scripts/operator-loop.mjs`. A teardown that ignored
+    its errors once left five test businesses on production.
+16. **Joining another table inside a policy.** The subquery runs as the caller,
+    with RLS on every table it touches. A passenger cannot see a *finished*
+    departure, so a rating policy that joined `departures` refused every real
+    rating at the exact moment passengers were invited to rate. Ask a
+    `SECURITY DEFINER` lookup instead — `departure_operator()`,
+    `is_departure_driver()`, `is_departure_passenger()`.
+17. **Leaving a PostgREST embed ambiguous.** A table with two foreign keys into
+    the same table — `reports`, `ratings` and `operator_invites` into
+    `profiles`, `bookings` into `stops` — must name the constraint
+    (`profiles!reports_reporter_id_fkey`), or PostgREST refuses the whole
+    query. The database tests speak SQL and cannot see this; only opening the
+    page can.
+18. **Reading `data ?? []`.** Turns #17, a missing grant, or a malformed select
+    into a plausible empty page. Use `rows()`, `one()`, `count()`.
+19. **Asserting a denied UPDATE rejects.** It does not raise — the rows are
+    invisible to it, so it succeeds having changed nothing. Assert the value is
+    unchanged. (A denied INSERT does raise.)
+20. **Widening a `RETURNS TABLE` with `create or replace`.** Postgres refuses.
+    Drop and recreate, and restate the grants the drop took with it.
+21. **Using an enum value in the migration that adds it.** `alter type … add
+    value` needs its own migration file.
+22. **Renaming a trigger on `auth.users`.** They fire alphabetically;
+    `on_auth_user_created` must run before `on_auth_user_created_invites`,
+    because memberships reference the profile the first one creates.
+23. **Authorising on the active account type.** It is a cookie that picks a
+    view. RLS and the functions decide what is allowed.
+24. **Minting a magic link on a public form.** `generateLink({ type:
+    'magiclink' })` creates the user if the address has none — account
+    conjuring plus an open mailer. Recovery mints `type: 'recovery'`.
+25. **Trusting a third-party call to throw.** `resend.emails.send()` returns
+    `{ error }`; `auth.admin.listUsers()` quietly returns only the first 50.
+    Check the error, walk the pages.
+26. **Seeding a state the product cannot reach.** An empty screen hid a broken
+    query for weeks; local rides seeded onto last week's trips showed operators
+    passengers nobody could act on. Seed every screen, and seed it plausibly.

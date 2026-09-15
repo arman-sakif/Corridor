@@ -28,7 +28,7 @@ move; the rule set below is close to what `next lint` gave.
 
 ## What is switched off, and why
 
-The defaults are kept except for eight rules. Each is off because it argues
+The defaults are kept except for ten rules. Each is off because it argues
 with something this codebase does deliberately — a linter that cries wolf gets
 ignored, and an ignored linter is the same as no linter.
 

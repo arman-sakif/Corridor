@@ -39,11 +39,13 @@ are the MVP; 6 and 7 followed.
 | 6 | In-city add-on: zones, the checkout add-on, separate approval | **built** |
 | 7 | Subscription tracking | **built** · mobile apps not started |
 
-Beyond the seven phases, three things were added because the product needed
+Beyond the seven phases, five things were added because the product needed
 them rather than because a roadmap asked:
 
 | | |
 |---|---|
+| **Account types** | One person, one login, a choice of hat: passenger, driver, operator or admin. Someone with more than one is asked *Log in as* at sign-in and can switch from the header without signing out. Each type has its own landing page, sections and colour — passenger blue, operator violet, driver amber, admin slate. An owner can switch driving on for themselves; anyone above passenger can switch passenger on or off in Profile. The choice is a view, never a permission: RLS still decides what a person may do. |
+| **Ride lists** | My rides and the operator's Requests show today onward, waiting-first. Past trips move to a paged History page on each side. Both filter by status and date and sort, all in the URL. The operator side draws each departure as seats, with a mark where passengers on different legs share one. |
 | **Notifications** | An in-app list with an unread badge, plus email. The in-app half is the one that works — see the sender note below. |
 | **Complaints** | A passenger reports a *trip*; the operator and a platform admin are both told, and either can close it with a note the passenger sees. The other direction stays a red flag, which the assigned driver can now raise too. |
 | **Feedback** | Anyone signed in can send an idea or an annoyance from *Tell us*; admins read them at `/admin/feedback`. |
@@ -187,7 +189,8 @@ update public.profiles set platform_role = 'admin'
 where id = (select id from auth.users where email = 'you@example.com');
 ```
 
-Then `/admin` lets you add cities and vet operators.
+Then `/admin` lets you add cities and vet operators. Signing in afterwards asks
+*Log in as* — admin, or passenger unless it is switched off in Profile.
 
 ### Demo data
 
@@ -233,13 +236,13 @@ free themselves whether or not the sweep has run.
 |---|---|
 | `npm run dev` | Development server. |
 | `npm run build` | Production build, including a full typecheck. |
-| `npm test` | Everything — unit tests and the database tests. |
-| `npm run test:unit` | Fares, capacity, money, time. Fast. |
+| `npm test` | Everything — unit tests and the database tests. 250 tests, about two minutes. |
+| `npm run test:unit` | The pure modules: fares, capacity, money, time, account types, ride lists, seat map, paging. Fast. |
 | `npm run test:db` | The real migrations against real Postgres. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm run lint` | oxlint. See [`docs/linting.md`](docs/linting.md) for why it is not ESLint. |
 | `npm run lint:fix` | The same, applying what it can fix. |
-| `npm run db:types` | Regenerate `lib/supabase/database.types.ts` from a live schema. |
+| `npm run db:types` | Regenerate `lib/supabase/database.types.ts` from a *local* Supabase stack (Docker). This project does not run one, so in practice the file is hand-maintained: update it in the same commit as any migration that changes a table. |
 | `node scripts/seed.mjs` | Rebuild the demo data. `--remove` takes it back out. |
 | `node scripts/e2e-loop.mjs` | The whole booking loop against a running app, request through settlement. |
 | `node scripts/operator-loop.mjs` | A brand-new operator from application to a seat on sale, against a running app. |
@@ -281,39 +284,50 @@ revenue that never arrives.
 
 ```
 app/
-  (public)/      search, departure detail, operator profiles, sign in, recovery
-  (passenger)/   my rides, booking detail, the local ride, notifications,
-                 profile, ratings, reports, feedback
-  (operator)/    setup, bookings queue, departures, fleet, team, zones,
-                 complaints, billing
-  (driver)/      today, manifest, flagging a passenger
+  (public)/      search, departure detail, operator profiles, for operators,
+                 sign in and up, "Log in as" picker, recovery
+  (passenger)/   my rides and history, booking detail, the local ride,
+                 notifications, profile and account types, reports, feedback
+  (operator)/    setup, requests and history, departures, fleet, team, zones,
+                 in-city requests, complaints, billing
+  (driver)/      trips, manifest, flagging and rating a passenger
   (admin)/       operator vetting, cities, subscriptions, complaints, feedback
   api/           manifest CSV, the daily job
   auth/          callback (PKCE) and confirm (token hash)
-components/      UI primitives, icons, navigation, shared complaint list
+  error.tsx      "we could not load this page" — a refused query lands here
+components/      UI primitives, icons, header and account switcher, seat map,
+                 list controls, shared complaint list
 lib/
-  auth/          session, role routing, sign-in, recovery, password strength
-  booking/       fares, capacity, search, booking and departure-day actions
+  auth/          session, account types (modes.ts pure, mode-session.ts the
+                 cookie), sign-in, recovery, password strength
+  booking/       fares, capacity, seat map, ride lists, search, booking and
+                 departure-day actions
   incity/        the local-ride add-on — isolated, imported by nothing else
   notifications/ reading the in-app list
-  operator/      setup actions
+  operator/      setup actions, paging through GoTrue's user list
   reports/       complaints and feedback
-  supabase/      clients and types
+  supabase/      clients, types, and rows()/one()/count() for every read
   validation/    zod schemas
   notify.ts      the one seam every notification goes through
+  routes.ts      the only typedRoutes escape hatches
+proxy.ts         Next 16's middleware: refreshes the session on every request
 supabase/
   migrations/    numbered SQL — schema, RLS, and every Postgres function
+  functions/     README only: which migration defines each function
   tests/         the migrations, run against real Postgres
 scripts/         seeding, and the loops that run against the real database
 ```
 
-Two rules about these boundaries:
+Three rules about these boundaries:
 
 - **`lib/booking/fares.ts` is the only module that reads `pricing_mode`.** No
   other code decides what a segment costs.
 - **`lib/incity` stays isolated.** Nothing in the intercity path imports from
   it. In-city is a Phase 6 add-on and must be removable without touching the
   booking flow.
+- **Every read goes through `rows()`, `one()` or `count()`.** A bare
+  `const { data }` followed by `data ?? []` renders a refused query as a calm
+  empty page; `lib/supabase/read-paths.test.ts` fails if one comes back.
 
 Postgres functions live in `supabase/migrations/`, not `supabase/functions/`.
 A function is schema and has to replay in order onto a fresh database;
@@ -359,3 +373,36 @@ driver. No money moves through Corridor.
 
 Ontario licensing and commercial passenger insurance are the operators'
 responsibility, not the platform's.
+
+---
+
+## Handing over
+
+What someone taking this on needs besides the repository:
+
+| Service | What it holds | State |
+|---|---|---|
+| **Vercel** | The deployment, env vars, and the daily cron (`vercel.json`, 08:00 UTC) | live |
+| **Supabase** | Postgres, Auth, the schema and all data | live — every migration applied |
+| **Resend** | Email | sandbox sender; reaches the account owner only |
+| **Google Cloud** | The OAuth client for *Continue with Google* | not created — see *Google sign-in* |
+| **GitHub** | This repository | — |
+
+Access to each is separate; transferring the repo transfers none of them. The
+environment variables are listed, with the reasoning for each, in
+`.env.example`.
+
+Settings that look like omissions and are not: Supabase *Confirm email* is off,
+`NEXT_PUBLIC_SITE_URL` is unset, `ENFORCE_UNIQUE_CONTACT` is unset. Each is
+explained above or in `.env.example`.
+
+Where to read next:
+
+- [`docs/architecture.md`](docs/architecture.md) — the design, the invariants,
+  and §10, every mistake this codebase has already made once.
+- [`supabase/functions/README.md`](supabase/functions/README.md) — which
+  migration defines each Postgres function.
+- [`docs/linting.md`](docs/linting.md) — why oxlint, and every disabled rule.
+- [`the operator notes`](the operator notes) — the operator
+  research. It names real businesses: swap them for fictional ones before any
+  public demo.
