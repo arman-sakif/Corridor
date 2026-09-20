@@ -86,7 +86,7 @@ export async function checkVoucher(
 ): Promise<VoucherCheck> {
   const parsed = voucherCodeSchema.safeParse({ departure_id: departureId, code });
   if (!parsed.success) {
-    return { ok: false, message: 'A voucher code is six digits.' };
+    return { ok: false, message: 'A voucher code is six letters or numbers.' };
   }
 
   await requireViewer(`/departures/${departureId}`);

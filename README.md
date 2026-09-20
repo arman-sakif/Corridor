@@ -50,7 +50,7 @@ them rather than because a roadmap asked:
 | **Complaints** | A passenger reports a *trip*; the operator and a platform admin are both told, and either can close it with a note the passenger sees. The other direction stays a red flag, which the assigned driver can now raise too. |
 | **Feedback** | Anyone signed in can send an idea or an annoyance from *Tell us*; admins read them at `/admin/feedback`. |
 | **Insights** | An operator sees how full their departures actually ran, broken down by day of the week, over 30 days, 90 days or a year. Fullness is measured on each departure's **busiest leg**, because that is what capacity means here — a van that carried Windsor→London and then London→Yorkdale sold two seats and was never more than a quarter full. It names the fullest and emptiest weekday and stops there; what to do about a quiet Tuesday is the operator's call. |
-| **Promotions** | An operator generates a six-digit voucher code worth a set amount or a percentage off, lasting 3 days, 7 days, 1 month or 4 months, with a ceiling on how many bookings can use it. A passenger types it when they request a seat. The code is scoped to the business that issued it, spendable once per passenger, and a lapsed hold gives its use straight back. |
+| **Promotions** | An operator generates a six-character voucher code worth a set amount or a percentage off, lasting 3 days, 7 days, 1 month or 4 months, with a ceiling on how many bookings can use it. A passenger types it when they request a seat. Codes are drawn from the digits and the letters without I, L, O and U, so a code read down a phone line cannot be misheard — and one typed with the letters anyway is folded onto the digits rather than refused. The code is scoped to the business that issued it, spendable once per passenger, and a lapsed hold gives its use straight back. |
 
 Not yet wired: Google OAuth, which needs credentials — so its buttons are
 greyed out and lead to a short page saying so. Everything else in the code path
@@ -234,7 +234,10 @@ intended state either way.
 ### The daily job
 
 `/api/cron` rolls the 30-day departure window forward and relabels lapsed
-holds. `vercel.json` schedules it; set `CRON_SECRET` or the route stays shut.
+holds. `vercel.json` schedules it; set `CRON_SECRET` or the route stays shut —
+**an empty value counts as unset**, which is how the job sat dead for three
+weeks while every invocation quietly took a 404. The route now logs why when
+the secret is missing.
 
 Neither job is load-bearing. Capacity excludes expired holds inline, so seats
 free themselves whether or not the sweep has run.
@@ -247,7 +250,7 @@ free themselves whether or not the sweep has run.
 |---|---|
 | `npm run dev` | Development server. |
 | `npm run build` | Production build, including a full typecheck. |
-| `npm test` | Everything — unit tests and the database tests. 299 tests, about two minutes. |
+| `npm test` | Everything — unit tests and the database tests. 307 tests, about two minutes. |
 | `npm run test:unit` | The pure modules: fares, capacity, money, time, account types, ride lists, seat map, paging, vouchers, insights. Fast. |
 | `npm run test:db` | The real migrations against real Postgres. |
 | `npm run typecheck` | `tsc --noEmit`. |

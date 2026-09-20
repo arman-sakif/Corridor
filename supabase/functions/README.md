@@ -103,10 +103,11 @@ asks one of these rather than joining it.
 
 | Function | Defined in | Does |
 |---|---|---|
-| `resolve_voucher()` | `20260920000030_vouchers.sql` | The voucher rules, in one place: the code belongs to this operator, is active, unexpired, under its ceiling, and unspent by this passenger. Locks the row when asked to. **Granted to nobody** — both callers are SECURITY DEFINER, and exposing it would be an oracle over every live code. |
+| `resolve_voucher()` | `20260920000030_vouchers.sql`, replaced in `20260920000032_alphanumeric_vouchers.sql` | The voucher rules, in one place: the code belongs to this operator, is active, unexpired, under its ceiling, and unspent by this passenger. Locks the row when asked to. **Granted to nobody** — both callers are SECURITY DEFINER, and exposing it would be an oracle over every live code. |
 | `voucher_discount_cents()` | `20260920000030_vouchers.sql` | Cents off, or a floored percentage of the fare, capped at the fare. IMMUTABLE. Mirrored for display by `lib/promotions/vouchers.ts`. |
 | `check_voucher()` | `20260920000030_vouchers.sql` | What the booking page asks before the passenger commits. Signed in only: six digits is a small space. |
-| `create_voucher()` | `20260920000030_vouchers.sql` | Generates the six digits and computes the expiry from one of four windows. Neither is a number the browser sends. |
+| `create_voucher()` | `20260920000030_vouchers.sql`, replaced in `20260920000032_alphanumeric_vouchers.sql` | Draws the six characters and computes the expiry from one of four windows. Neither is a value the browser sends. |
+| `normalise_voucher_code()` | `20260920000032_alphanumeric_vouchers.sql` | Upper-cases and folds O to 0, I and L to 1, so a code heard down a phone line resolves however it was typed. Granted to nobody — the two callers reach it as the owner. |
 | `set_voucher_active()` | `20260920000030_vouchers.sql` | Withdraw a code early, or put it back. Never a delete. |
 | `voucher_uses()` | `20260920000030_vouchers.sql` | How far each code has got, counted the way `resolve_voucher()` counts — lapsed holds excluded inline. |
 | `operator_insights()` | `20260920000031_insights.sql` | Per weekday: departures, seats offered, seats taken **at the busiest leg**, how many went out full, fares, discounts, and requests that went nowhere. |

@@ -604,10 +604,14 @@ async function seedVouchers() {
     },
   ];
 
+  // The same alphabet create_voucher() draws from: digits and letters, without
+  // the I, L, O and U that get misheard down a phone line.
+  const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
   const taken = new Set();
   const nextCode = () => {
     for (;;) {
-      const code = String(between(0, 999999)).padStart(6, '0');
+      let code = '';
+      for (let i = 0; i < 6; i += 1) code += ALPHABET[between(0, ALPHABET.length - 1)];
       if (!taken.has(code)) {
         taken.add(code);
         return code;

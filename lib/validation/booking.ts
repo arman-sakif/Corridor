@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { normaliseVoucherCode, VOUCHER_CODE_PATTERN } from '@/lib/promotions/vouchers';
+
 export const requestSeatSchema = z.object({
   departure_id: z.uuid('Unknown departure.'),
   // "fromStopId:toStopId" — one control, so a passenger picks a journey rather
@@ -27,14 +29,17 @@ export const requestSeatSchema = z.object({
     .max(300, 'Keep this under 300 characters.')
     .optional()
     .or(z.literal('')),
-  // Optional, and six digits when it is there. The discount it is worth is
-  // never sent from here — request_booking() resolves the code itself.
+  // Optional, and six letters or numbers when it is there. The discount it is
+  // worth is never sent from here — request_booking() resolves the code
+  // itself, normalising it the same way this does.
   voucher_code: z
     .string()
-    .trim()
-    .regex(/^[0-9]{6}$/, 'A voucher code is six digits.')
-    .optional()
-    .or(z.literal('')),
+    .transform(normaliseVoucherCode)
+    .refine(
+      (code) => code === '' || VOUCHER_CODE_PATTERN.test(code),
+      'A voucher code is six letters or numbers.',
+    )
+    .optional(),
 });
 
 export const bookingIdSchema = z.object({

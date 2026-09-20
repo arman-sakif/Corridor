@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { voucherDiscountCents, voucherState, windowLabel } from './vouchers.ts';
+import {
+  normaliseVoucherCode,
+  VOUCHER_CODE_PATTERN,
+  voucherDiscountCents,
+  voucherState,
+  windowLabel,
+} from './vouchers.ts';
 
 const NOW = new Date('2026-09-20T12:00:00Z');
 
@@ -60,6 +66,46 @@ describe('voucherState', () => {
       voucherState({ ...live, is_active: false, expires_at: '2026-09-19T00:00:00Z' }, 0, NOW),
       'withdrawn',
     );
+  });
+});
+
+/**
+ * This is the display half of a rule the database owns twice over: the same
+ * folding happens in `normalise_voucher_code()`. If the two ever disagree, a
+ * code the booking page accepts is a code the booking refuses.
+ */
+describe('normaliseVoucherCode', () => {
+  it('uppercases, because a code is read aloud and typed in a hurry', () => {
+    assert.equal(normaliseVoucherCode('ab12cd'), 'AB12CD');
+  });
+
+  it('trims whatever came with it', () => {
+    assert.equal(normaliseVoucherCode('  AB12CD  '), 'AB12CD');
+  });
+
+  it('folds the letters that get misheard for digits', () => {
+    // O against 0, and I or L against 1, are the pairs that go wrong down a
+    // phone line. The alphabet drops the letters, so typing one is still
+    // understood rather than refused.
+    assert.equal(normaliseVoucherCode('OIL2AB'), '0112AB');
+    assert.equal(normaliseVoucherCode('oil2ab'), '0112AB');
+  });
+
+  it('leaves a code drawn from the real alphabet alone', () => {
+    for (const code of ['9K3MTV', '0112AB', 'ZZZZZZ', '234567']) {
+      assert.equal(normaliseVoucherCode(code), code);
+      assert.match(code, VOUCHER_CODE_PATTERN);
+    }
+  });
+
+  it('does not rescue something that is not a code', () => {
+    assert.doesNotMatch(normaliseVoucherCode('AB-12C'), VOUCHER_CODE_PATTERN);
+    assert.doesNotMatch(normaliseVoucherCode('AB12C'), VOUCHER_CODE_PATTERN);
+    assert.doesNotMatch(normaliseVoucherCode('AB12CDE'), VOUCHER_CODE_PATTERN);
+  });
+
+  it('still accepts the numeric codes issued before the alphabet widened', () => {
+    assert.match(normaliseVoucherCode('048655'), VOUCHER_CODE_PATTERN);
   });
 });
 

@@ -61,9 +61,19 @@ describe('creating a voucher', () => {
 
   after(async () => test.close());
 
-  it('generates a six-digit code the operator did not choose', async () => {
+  it('generates a six-character code the operator did not choose', async () => {
     const code = await createVoucher(test, corridor);
-    assert.match(code, /^[0-9]{6}$/);
+    assert.match(code, /^[0-9A-Z]{6}$/);
+  });
+
+  it('draws from an alphabet without the characters that get misheard', async () => {
+    // O against 0, and I or L against 1, are the pairs that go wrong when a
+    // code is read down a phone line. U is out so six random characters
+    // cannot spell something an operator would rather not have printed.
+    for (let i = 0; i < 25; i += 1) {
+      const code = await createVoucher(test, corridor);
+      assert.doesNotMatch(code, /[ILOU]/, `${code} contains a character we do not issue`);
+    }
   });
 
   it('computes the expiry from the window, in the database', async () => {
@@ -479,7 +489,23 @@ describe('checking a code before committing', () => {
     );
   });
 
-  it('says a code is six digits rather than pretending to look it up', async () => {
+  it('reads a code back the way it was heard, not the way it was typed', async () => {
+    // The alphabet drops O, I and L rather than 0 and 1, so a passenger who
+    // types the letter is understood instead of refused.
+    const code = await createVoucher(test, corridor, { kind: 'amount', value: 700 });
+    const spelled = code.replace(/0/g, 'O').replace(/1/g, 'l').toLowerCase();
+    const rider = await passenger(test, 'Misheard');
+
+    const [row] = await test.asUser<{ value: number }>(
+      rider,
+      `select value from public.check_voucher($1, $2)`,
+      [corridor.departureId, spelled],
+    );
+
+    assert.equal(row?.value, 700, `${spelled} should resolve to ${code}`);
+  });
+
+  it('says a code is six letters or numbers rather than pretending to look it up', async () => {
     const rider = await passenger(test, 'Typo');
     await assert.rejects(
       () =>
@@ -487,7 +513,7 @@ describe('checking a code before committing', () => {
           corridor.departureId,
           'FREE',
         ]),
-      /six digits/,
+      /six letters or numbers/,
     );
   });
 });

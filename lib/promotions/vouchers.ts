@@ -23,6 +23,28 @@ export function windowLabel(validity: VoucherWindow): string {
   return VOUCHER_WINDOWS.find((w) => w.value === validity)?.label ?? validity;
 }
 
+/** The shape a stored code takes. Wider than the alphabet it is drawn from. */
+export const VOUCHER_CODE_PATTERN = /^[0-9A-Z]{6}$/;
+
+/**
+ * What the passenger typed, as the code it means.
+ *
+ * Mirrors `normalise_voucher_code()` in `20260920000032_alphanumeric_vouchers.sql`
+ * — change one, change the other.
+ *
+ * Codes are drawn from the digits plus the letters without I, L, O and U,
+ * because a code gets read down a phone line and O against 0, and I or L
+ * against 1, are the pairs that get misheard. Dropping the letter of each pair
+ * rather than the digit means somebody who types the letter anyway is still
+ * understood: `oil2ab` and `0112AB` are the same code.
+ */
+export function normaliseVoucherCode(input: string): string {
+  return input
+    .trim()
+    .toUpperCase()
+    .replace(/[OIL]/g, (c) => (c === 'O' ? '0' : '1'));
+}
+
 /**
  * What a code takes off a fare of `totalCents`.
  *

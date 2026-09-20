@@ -25,9 +25,10 @@ import { describeVoucher, voucherState, windowLabel } from '@/lib/promotions/vou
 /**
  * Codes an operator hands out, and how far each has got.
  *
- * A code is six digits because it gets read down a phone line and typed into a
- * phone at a bus stop. It is scoped to this business, so it does not matter
- * that a rival may have issued the same six digits.
+ * A code is six characters because it gets read down a phone line and typed
+ * into a phone at a bus stop — digits and letters, without the I, L, O and U
+ * that get misheard for one another. It is scoped to this business, so it does
+ * not matter that a rival has issued the same six.
  */
 export default async function PromotionsPage({
   params,
@@ -50,7 +51,7 @@ export default async function PromotionsPage({
     <>
       <PageHeader
         title="Promotions"
-        description="Six-digit codes that take money off a fare. Give one out however you reach passengers — a Kijiji ad, a WhatsApp group, a card in the van."
+        description="Six-character codes that take money off a fare. Give one out however you reach passengers — a Kijiji ad, a WhatsApp group, a card in the van."
       />
 
       <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
@@ -58,7 +59,7 @@ export default async function PromotionsPage({
           <Card className="h-fit p-5">
             <h2 className="font-semibold text-ink-900">New code</h2>
             <p className="mt-1 mb-4 text-sm text-ink-600">
-              Corridor picks the digits. You pick what it is worth and how long it lasts.
+              Corridor picks the characters. You pick what it is worth and how long it lasts.
             </p>
             <VoucherForm operatorId={operatorId} />
           </Card>

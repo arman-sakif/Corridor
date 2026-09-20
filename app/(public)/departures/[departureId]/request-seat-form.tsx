@@ -9,7 +9,11 @@ import { Button, Card, Field, Input, Select, Textarea } from '@/components/ui';
 import { IconLuggage, IconSeat, IconTicket } from '@/components/icons';
 import { idleState } from '@/lib/forms';
 import { formatCents } from '@/lib/money';
-import { describeVoucher, voucherDiscountCents } from '@/lib/promotions/vouchers';
+import {
+  describeVoucher,
+  normaliseVoucherCode,
+  voucherDiscountCents,
+} from '@/lib/promotions/vouchers';
 import type { VoucherKind } from '@/lib/supabase/database.types';
 import type { SurchargePolicy } from '@/lib/booking/fares';
 
@@ -205,20 +209,31 @@ export function RequestSeatForm({
               Voucher code (optional)
             </span>
           }
-          hint="Six digits, from the operator. One booking per code."
+          hint="Six letters or numbers, from the operator. One booking per code."
           error={fieldError(state, 'voucher_code')}
         >
           <div className="flex gap-2">
             <Input
               name="voucher_code"
-              inputMode="numeric"
+              inputMode="text"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
               maxLength={6}
-              placeholder="123456"
+              placeholder="9K3MTV"
               autoComplete="off"
-              className="numeric tracking-[0.2em]"
+              className="numeric uppercase tracking-[0.2em]"
               value={code}
               onChange={(event) => {
-                setCode(event.target.value.replace(/\D/g, '').slice(0, 6));
+                // Normalised as they type, the same way the database will
+                // normalise it: uppercase, and the letters that get misheard
+                // for digits folded onto the digits. Anything else is dropped
+                // rather than shown and then rejected.
+                setCode(
+                  normaliseVoucherCode(event.target.value)
+                    .replace(/[^0-9A-Z]/g, '')
+                    .slice(0, 6),
+                );
                 setVoucher(null);
                 setVoucherNote(null);
               }}

@@ -11,7 +11,7 @@ import { VOUCHER_WINDOWS } from '@/lib/promotions/vouchers';
 /**
  * Four decisions and a button. The code itself is not one of them — it is
  * generated when this is submitted, because an operator choosing their own
- * would choose 111111.
+ * would choose AAAAAA, and the one next door would choose it too.
  */
 export function VoucherForm({ operatorId }: { operatorId: string }) {
   const [state, action] = useActionState(createVoucher, idleState);

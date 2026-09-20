@@ -27,9 +27,20 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
 
-  // Vercel Cron sends the secret as a bearer token. Without one configured the
-  // route stays shut rather than running on anyone's request.
-  if (!secret || request.headers.get('authorization') !== `Bearer ${secret}`) {
+  // An unset secret shuts this route, which is the right default — but it is
+  // indistinguishable from a wrong bearer token, and that cost us three weeks
+  // of departures. `CRON_SECRET` was present but empty, so every scheduled
+  // invocation got a 404 and nothing anywhere said why. Say why.
+  if (!secret) {
+    console.error(
+      'cron refused: CRON_SECRET is unset or empty, so the daily job cannot run. ' +
+        'Set it in the project environment and redeploy — an empty value counts as unset.',
+    );
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  // Vercel Cron sends the secret as a bearer token.
+  if (request.headers.get('authorization') !== `Bearer ${secret}`) {
     return new NextResponse('Not found', { status: 404 });
   }
 

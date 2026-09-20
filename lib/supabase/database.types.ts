@@ -860,7 +860,7 @@ export interface Database {
         {
           id: string;
           operator_id: string;
-          /** Exactly six digits. Leading zeros are part of it, so never a number. */
+          /** Six characters, `[0-9A-Z]`. Leading zeros count, so never a number. */
           code: string;
           kind: VoucherKind;
           /** Cents off when `kind` is 'amount', whole percent when 'percent'. */
@@ -955,7 +955,7 @@ export interface Database {
           p_seats: number;
           p_luggage_count: number;
           p_passenger_note: string | null;
-          /** A six-digit code, or nothing. Never an amount — see §5.3. */
+          /** A six-character code, or nothing. Never an amount — see §5.3. */
           p_voucher_code?: string | null;
         };
         Returns: string;
@@ -1036,7 +1036,7 @@ export interface Database {
           p_window: VoucherWindow;
           p_max_uses: number;
         };
-        /** The generated six-digit code. */
+        /** The generated six-character code. */
         Returns: string;
       };
       set_voucher_active: {

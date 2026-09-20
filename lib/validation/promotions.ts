@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { parseDollarsToCents } from '@/lib/money';
+import { normaliseVoucherCode, VOUCHER_CODE_PATTERN } from '@/lib/promotions/vouchers';
 
 /**
  * Promotions: the codes an operator issues, and the code a passenger types.
@@ -65,13 +66,13 @@ export const voucherToggleSchema = z.object({
 });
 
 /**
- * Six digits, checked before it is sent anywhere. A typo should be answered by
- * the form rather than by a round trip.
+ * Six letters or numbers, normalised and checked before it is sent anywhere. A
+ * typo should be answered by the form rather than by a round trip.
  */
 export const voucherCodeSchema = z.object({
   departure_id: z.uuid(),
   code: z
     .string()
-    .trim()
-    .regex(/^[0-9]{6}$/, 'A voucher code is six digits.'),
+    .transform(normaliseVoucherCode)
+    .refine((code) => VOUCHER_CODE_PATTERN.test(code), 'A voucher code is six letters or numbers.'),
 });
