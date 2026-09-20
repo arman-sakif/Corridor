@@ -50,8 +50,9 @@ them rather than because a roadmap asked:
 | **Complaints** | A passenger reports a *trip*; the operator and a platform admin are both told, and either can close it with a note the passenger sees. The other direction stays a red flag, which the assigned driver can now raise too. |
 | **Feedback** | Anyone signed in can send an idea or an annoyance from *Tell us*; admins read them at `/admin/feedback`. |
 
-Not yet wired: Google OAuth, which needs credentials. Everything else in the
-code path is complete.
+Not yet wired: Google OAuth, which needs credentials — so its buttons are
+greyed out and lead to a short page saying so. Everything else in the code path
+is complete.
 
 **Email is on Resend's sandbox sender**, which delivers only to the address the
 Resend account was opened with. That is a deliberate prototype constraint —
@@ -67,9 +68,11 @@ To send to real passengers: verify a domain at
 [resend.com/domains](https://resend.com/domains), then point
 `NOTIFY_FROM_EMAIL` at it. Nothing in the code changes.
 
-Signing in is email and password or Google. Phone number as a *login* is not
-built: Supabase phone auth needs a paid SMS provider, and there is none yet.
-Phone is still collected at signup, as the number an operator dials.
+Signing in is email and password. Google is written but switched off at the
+button until it has credentials — see *Google sign-in*. Phone number as a
+*login* is not built: Supabase phone auth needs a paid SMS provider, and there
+is none yet. Phone is still collected at signup, as the number an operator
+dials.
 
 ---
 
@@ -169,13 +172,19 @@ so the redirect URI below is a `supabase.co` address, not a `vercel.app` one.
 4. **Supabase → Authentication → Providers → Google**: enable it, paste both
    values, save.
 
-5. Check it: `node scripts/auth-loop.mjs` reports whether the provider is live,
+5. Switch the buttons back on: delete `components/google-button.tsx` and the
+   `/google-unavailable` page, and have `sign-in-form.tsx` and `sign-up-form.tsx`
+   post their `next` to `signInWithGoogle` again — the shape each one replaced
+   is in the file's header comment.
+
+6. Check it: `node scripts/auth-loop.mjs` reports whether the provider is live,
    then press *Continue with Google* on `/sign-in`.
 
-Until this is done the Google buttons return to the sign-in screen with an
-explanation; email and password work regardless. Nothing in the app changes —
-`signInWithGoogle` and `/auth/callback` are already written and route by role
-on return.
+Until step 5, *Continue with Google* is greyed out, says *Not available in
+current version* on hover, and leads to a page that points at email and
+password instead — which work regardless. Nothing else is stubbed:
+`signInWithGoogle` and `/auth/callback` are written and route by role on
+return, so only the two forms and that one page have to change.
 
 ### Becoming a platform admin
 

@@ -2,11 +2,11 @@
 
 import { useActionState, useState } from 'react';
 
-import { signInWithGoogle, signUpWithPassword } from '@/lib/auth/actions';
+import { signUpWithPassword } from '@/lib/auth/actions';
 import { FormMessage, SubmitButton, fieldError } from '@/components/form';
+import { GoogleButton } from '@/components/google-button';
 import { PasswordField } from '@/components/password-field';
-import { Button, Field, Input } from '@/components/ui';
-import { IconGoogle } from '@/components/icons';
+import { Field, Input } from '@/components/ui';
 import { idleState } from '@/lib/forms';
 
 export function SignUpForm({ next }: { next: string }) {
@@ -19,13 +19,7 @@ export function SignUpForm({ next }: { next: string }) {
 
   return (
     <div className="space-y-5">
-      <form action={signInWithGoogle}>
-        <input type="hidden" name="next" value={next} />
-        <Button type="submit" tone="secondary" size="lg" className="w-full">
-          <IconGoogle className="text-lg" />
-          Continue with Google
-        </Button>
-      </form>
+      <GoogleButton next={next} />
 
       <div className="flex items-center gap-3 text-xs text-ink-400">
         <span className="h-px flex-1 bg-ink-200" />

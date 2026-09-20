@@ -23,6 +23,9 @@ const buttonTone = {
   secondary: 'bg-white text-ink-800 ring-1 ring-ink-200 shadow-card hover:bg-ink-50 hover:ring-ink-300',
   danger: 'bg-white text-bad-700 ring-1 ring-bad-100 hover:bg-bad-50 hover:ring-bad-600/30',
   ghost: 'text-ink-600 hover:bg-ink-150 hover:text-ink-900',
+  // A control that is present but cannot act yet. Looks like `disabled` without
+  // being it, so the press can still go somewhere that explains why.
+  muted: 'bg-ink-50 text-ink-400 ring-1 ring-ink-200 cursor-not-allowed active:translate-y-0',
 } as const;
 
 const buttonSize = {
