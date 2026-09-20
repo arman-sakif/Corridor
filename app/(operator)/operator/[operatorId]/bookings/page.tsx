@@ -41,6 +41,8 @@ type Request = {
   status: BookingStatus;
   hold_expires_at: string | null;
   total_cents: number;
+  discount_cents: number;
+  voucher: { code: string } | null;
   passenger_note: string | null;
   passenger_id: string;
   created_at: string;
@@ -89,7 +91,8 @@ export default async function BookingsQueuePage({
   let query = supabase
     .from('bookings')
     .select(
-      `id, seats, luggage_count, status, hold_expires_at, total_cents, passenger_note, passenger_id, created_at,
+      `id, seats, luggage_count, status, hold_expires_at, total_cents, discount_cents, passenger_note, passenger_id, created_at,
+       voucher:vouchers(code),
        passenger:profiles(full_name, phone, gender, accommodation_notes),
        from_stop:stops!bookings_from_stop_id_fkey(label, city:cities(name)),
        to_stop:stops!bookings_to_stop_id_fkey(label, city:cities(name)),
@@ -229,6 +232,16 @@ function WaitingRequest({ request, seatView }: { request: Request; seatView: Rea
           <span className="numeric font-medium text-ink-900">
             {formatCents(request.total_cents)}
           </span>
+          {/*
+            The driver collects the discounted total, so the code is worth
+            seeing here rather than being a surprise on the day.
+          */}
+          {request.discount_cents > 0 ? (
+            <span className="numeric ml-1.5 text-good-700">
+              (voucher {request.voucher?.code ?? ''} took off{' '}
+              {formatCents(request.discount_cents)})
+            </span>
+          ) : null}
         </p>
 
         {request.passenger_note ? (

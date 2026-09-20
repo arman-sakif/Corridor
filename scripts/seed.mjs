@@ -30,6 +30,7 @@ import {
   SUBSCRIPTIONS,
 } from './seed-data.mjs';
 import { segmentBaseCents } from '../lib/booking/fares.ts';
+import { voucherDiscountCents } from '../lib/promotions/vouchers.ts';
 import { addDays, todayInToronto } from '../lib/time.ts';
 
 /* ------------------------------------------------------------------ setup */
@@ -66,6 +67,42 @@ const between = (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
 const today = new Date();
 const isoDate = (offsetDays) =>
   new Date(today.getTime() + offsetDays * 86400000).toISOString().slice(0, 10);
+
+/**
+ * How far back the finished trips go.
+ *
+ * Ninety days rather than a fortnight, because the operator insights page
+ * offers a 30-day and a 90-day window and both were showing the same two
+ * weeks. Everything is dated relative to today, so a reseed is always current.
+ */
+const PAST_DAYS = 90;
+
+/**
+ * Demand is not flat across the week, and the seed should not pretend it is.
+ *
+ * Friday out and Sunday back are when these vans fill — students and workers
+ * going home — while Tuesday and Wednesday run half empty. A uniform booking
+ * chance would draw the insights page as seven bars of the same height, which
+ * would demonstrate nothing and, worse, would look like a working feature.
+ *
+ * Sunday first, matching `extract(dow)` and `Date#getDay`.
+ */
+const WEEKDAY_DEMAND = [1.5, 0.55, 0.45, 0.5, 0.85, 1.6, 1.15];
+
+/**
+ * Roughly what share of a van a finished trip carried, before the weekday
+ * weighting above is applied to it. An operator running at three per cent
+ * would not be running, so a seed that produces that is not seed data for a
+ * business — it is seed data for a graveyard.
+ */
+const PAST_FILL = 0.5;
+
+/**
+ * How far back a voucher can have been spent. The seeded codes expire within
+ * days or weeks, so they were minted recently, and a redemption older than
+ * this would describe a booking that used a code which did not yet exist.
+ */
+const VOUCHER_WINDOW_DAYS = 21;
 
 /* ----------------------------------------------------------------- remove */
 
@@ -379,14 +416,14 @@ async function seedAll() {
           departure_time: time,
           days_of_week: SCHEDULE_DAYS,
           max_seats: op.maxSeats,
-          active_from: isoDate(-40),
+          active_from: isoDate(-PAST_DAYS - 10),
         });
         if (error) die(`Could not schedule ${routeName} at ${time}`, error);
         scheduleCount += 1;
 
         // Departures behind us, so dashboards have finished trips to show.
         // generate_departures only ever looks forward.
-        for (let back = 1; back <= 14; back += 1) {
+        for (let back = 1; back <= PAST_DAYS; back += 1) {
           departureRows.push({
             operator_id: operatorId,
             route_id: route.id,
@@ -509,8 +546,11 @@ async function seedAll() {
 
   console.log(`${subscriptionCount} subscriptions, one of them past due.`);
 
+  /* ---- promotions ------------------------------------------------------ */
+  const vouchersByOperator = await seedVouchers();
+
   /* ---- bookings -------------------------------------------------------- */
-  await seedBookings({ passengerIds, ratingRows, redFlagRows });
+  await seedBookings({ passengerIds, ratingRows, redFlagRows, vouchersByOperator });
 
   /* ---- who drives what ------------------------------------------------- */
   await seedVehicleAssignments(fleetByOperator);
@@ -532,6 +572,98 @@ async function seedAll() {
   console.log(`\nEvery account signs in with the password: ${PASSWORD}`);
 }
 
+/* ------------------------------------------------------------- promotions */
+
+/**
+ * A handful of voucher codes per live operator, in every state the promotions
+ * page can show: live, expired, withdrawn, and one about to run out of uses.
+ *
+ * Written directly rather than through `create_voucher()`, which reads
+ * `auth.uid()` to decide who is asking and rightly refuses the service role.
+ * The expiry is therefore computed here — the one place in the system where it
+ * is not the database doing it, and only because this is a fixture.
+ *
+ * Returns the live codes per operator, so the booking pass can spend some.
+ */
+async function seedVouchers() {
+  // `expiresInDays` is what `validity` would have produced had the code been
+  // made when its window says, so a reader sees a plausible history rather
+  // than four codes all minted this morning.
+  const PLANS = [
+    { kind: 'amount', value: 500, validity: '7d', maxUses: 40, expiresInDays: 5, live: true },
+    { kind: 'percent', value: 10, validity: '1m', maxUses: 120, expiresInDays: 24, live: true },
+    { kind: 'amount', value: 1000, validity: '3d', maxUses: 15, expiresInDays: -4, live: false },
+    {
+      kind: 'percent',
+      value: 15,
+      validity: '4m',
+      maxUses: 25,
+      expiresInDays: 96,
+      live: false,
+      withdrawn: true,
+    },
+  ];
+
+  const taken = new Set();
+  const nextCode = () => {
+    for (;;) {
+      const code = String(between(0, 999999)).padStart(6, '0');
+      if (!taken.has(code)) {
+        taken.add(code);
+        return code;
+      }
+    }
+  };
+
+  const rows = [];
+  const liveCodes = new Set();
+
+  for (const op of OPERATORS) {
+    const operatorId = op._runtime?.operatorId;
+    // A pending operator is invisible in search, so nobody could redeem one.
+    if (!operatorId || op.status === 'pending') continue;
+
+    for (const plan of PLANS) {
+      const code = nextCode();
+      rows.push({
+        operator_id: operatorId,
+        code,
+        kind: plan.kind,
+        value: plan.value,
+        validity: plan.validity,
+        expires_at: new Date(today.getTime() + plan.expiresInDays * 86400000).toISOString(),
+        max_uses: plan.maxUses,
+        is_active: !plan.withdrawn,
+        created_by: op._runtime.ownerId,
+      });
+      if (plan.live) liveCodes.add(`${operatorId}:${code}`);
+    }
+  }
+
+  const liveByOperator = new Map();
+  if (rows.length) {
+    const { data, error } = await db
+      .from('vouchers')
+      .insert(rows)
+      .select('id, operator_id, code, kind, value, max_uses');
+    if (error) die('Could not create vouchers', error);
+
+    for (const voucher of data ?? []) {
+      if (!liveCodes.has(`${voucher.operator_id}:${voucher.code}`)) continue;
+      const list = liveByOperator.get(voucher.operator_id) ?? [];
+      // `used` and `spentBy` keep the seed inside the rules the database
+      // enforces: a code cannot go past its ceiling, and one passenger spends
+      // it once. Seed data the product could not have produced is worse than
+      // no seed data.
+      list.push({ ...voucher, used: 0, spentBy: new Set() });
+      liveByOperator.set(voucher.operator_id, list);
+    }
+  }
+
+  console.log(`${rows.length} voucher codes across ${liveByOperator.size} operators.`);
+  return liveByOperator;
+}
+
 /* --------------------------------------------------------------- bookings */
 
 /**
@@ -540,7 +672,7 @@ async function seedAll() {
  * only thing standing between the seed and a database state the app itself
  * would have refused to create.
  */
-async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
+async function seedBookings({ passengerIds, ratingRows, redFlagRows, vouchersByOperator }) {
   // PostgREST caps a select at 1000 rows, and there are more departures than
   // that, so this pages rather than silently seeing two thirds of them.
   const departures = [];
@@ -604,13 +736,29 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
 
     const isPast = departure.service_date < todayIso;
 
-    // Most departures on a rolling 30-day window have nothing booked yet —
-    // that is what a real book looks like, and a database where every
-    // departure is busy hides exactly the empty states the UI has to handle.
-    // Past departures carry more, because they actually ran.
-    const chance = isPast ? 0.2 : 0.08;
-    if (rand() > chance) continue;
-    const attempts = between(1, 3);
+    const dow = new Date(`${departure.service_date}T00:00:00Z`).getUTCDay();
+    let attempts;
+
+    if (isPast) {
+      // A trip that has run carried a load, and the load has a weekday shape:
+      // Friday out and Sunday back fill, Tuesday and Wednesday do not. So aim
+      // at a share of the van rather than tossing a coin. The insights page
+      // exists to tell an operator which days fill, and it cannot tell them
+      // anything against data where every weekday is the same coin.
+      //
+      // The jitter is half to one and a half of the target, so no two Fridays
+      // are identical and the odd one is quiet.
+      const target = Math.min(0.85, PAST_FILL * WEEKDAY_DEMAND[dow]);
+      attempts = Math.round(departure.max_seats * target * (0.5 + rand()));
+      if (attempts < 1) continue;
+    } else {
+      // The forward book stays thin. Most departures on a rolling 30-day
+      // window have nothing booked yet — that is what a real book looks like,
+      // and a database where every departure is already busy hides exactly the
+      // empty states the UI has to handle.
+      if (rand() > 0.08 * WEEKDAY_DEMAND[dow]) continue;
+      attempts = between(1, 3);
+    }
 
     for (let i = 0; i < attempts; i += 1) {
       const fromSeq = between(1, stops.length - 1);
@@ -649,6 +797,34 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
 
       const passengerId = pick(passengerIds);
 
+      // A voucher, where the rules allow one: a code with uses left, and a
+      // passenger who has not already spent that one. A cancelled or declined
+      // booking gives its use back, so only the ones that stuck count.
+      //
+      // Confined to the last few weeks, for two reasons. A code that expires
+      // in seven days was minted days ago and cannot have been spent in June;
+      // and the departures below are walked oldest first, so without this
+      // every redemption lands in the oldest week and the default 30-day
+      // insights view shows a discount column of dashes.
+      const fareBeforeDiscount = baseCents + luggageCents + airportCents;
+      const recent = departure.service_date >= isoDate(-VOUCHER_WINDOW_DAYS);
+      const spendable = recent
+        ? (vouchersByOperator?.get(departure.operator_id) ?? []).filter(
+            (v) => v.used < v.max_uses && !v.spentBy.has(passengerId),
+          )
+        : [];
+      const voucher =
+        spendable.length > 0 && rand() < 0.3 && !status.startsWith('cancelled')
+          ? pick(spendable)
+          : null;
+      const discountCents = voucher
+        ? voucherDiscountCents(voucher.kind, voucher.value, fareBeforeDiscount)
+        : 0;
+      if (voucher) {
+        voucher.used += 1;
+        voucher.spentBy.add(passengerId);
+      }
+
       rows.push({
         departure_id: departure.id,
         passenger_id: passengerId,
@@ -665,7 +841,9 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
         base_cents: baseCents,
         luggage_cents: luggageCents,
         airport_cents: airportCents,
-        total_cents: baseCents + luggageCents + airportCents,
+        voucher_id: voucher?.id ?? null,
+        discount_cents: discountCents,
+        total_cents: fareBeforeDiscount - discountCents,
         passenger_note: rand() < 0.15 ? pick(NOTES) : null,
         payment_method: status === 'settled' ? pick(['cash', 'cash', 'etransfer']) : null,
         passenger_confirmed_at: status === 'settled' ? new Date().toISOString() : null,
@@ -722,6 +900,11 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows }) {
           base_cents: perSeat,
           luggage_cents: 0,
           airport_cents: 0,
+          // Stated rather than left out: PostgREST fills a key missing from
+          // one row of a bulk insert with NULL, so an omitted column here
+          // fails the whole batch against a NOT NULL default.
+          voucher_id: null,
+          discount_cents: 0,
           total_cents: perSeat,
           passenger_note: null,
           payment_method: null,
@@ -864,17 +1047,27 @@ async function seedVehicleAssignments(fleetByOperator) {
   const from = addDays(serviceToday, -7);
   const to = addDays(serviceToday, 14);
 
-  // 240 bookings exist in total, so this sits well inside PostgREST's 1000-row
-  // cap. Narrow the window before widening it if that ever stops being true.
-  const { data: rows, error } = await db
-    .from('bookings')
-    .select('id, seats, departure_id, departure:departures!inner(id, operator_id, service_date)')
-    .in('status', ['approved', 'completed', 'settled', 'no_show'])
-    .gte('departure.service_date', from)
-    .lte('departure.service_date', to)
-    .order('from_seq');
+  // Paged rather than taken in one go. This used to rely on there being only
+  // a couple of hundred bookings in total; once the past window grew to three
+  // months the three weeks around today went past PostgREST's 1000-row cap,
+  // and a silent truncation here reads as "these departures had no riders"
+  // rather than as an error.
+  const rows = [];
+  for (let page = 0; ; page += 1) {
+    const { data, error } = await db
+      .from('bookings')
+      .select('id, seats, departure_id, departure:departures!inner(id, operator_id, service_date)')
+      .in('status', ['approved', 'completed', 'settled', 'no_show'])
+      .gte('departure.service_date', from)
+      .lte('departure.service_date', to)
+      .order('from_seq')
+      .order('id')
+      .range(page * 1000, page * 1000 + 999);
 
-  if (error) die('Could not read bookings to assign', error);
+    if (error) die('Could not read bookings to assign', error);
+    rows.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
 
   const byDeparture = new Map();
   for (const row of rows ?? []) {

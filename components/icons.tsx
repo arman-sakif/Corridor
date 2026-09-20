@@ -216,3 +216,22 @@ export const IconBell = (p: IconProps) => (
     <path d="M10.5 18a1.8 1.8 0 0 0 3 0" />
   </Icon>
 );
+
+export const IconTicket = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M3 9.5V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5Z" />
+    <path d="M14 5v2" />
+    <path d="M14 11v2" />
+    <path d="M14 17v2" />
+  </Icon>
+);
+
+export const IconChart = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 20V4" />
+    <path d="M4 20h16" />
+    <path d="M8 20v-6" />
+    <path d="M13 20V8" />
+    <path d="M18 20v-9" />
+  </Icon>
+);

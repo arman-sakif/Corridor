@@ -27,6 +27,14 @@ export const requestSeatSchema = z.object({
     .max(300, 'Keep this under 300 characters.')
     .optional()
     .or(z.literal('')),
+  // Optional, and six digits when it is there. The discount it is worth is
+  // never sent from here — request_booking() resolves the code itself.
+  voucher_code: z
+    .string()
+    .trim()
+    .regex(/^[0-9]{6}$/, 'A voucher code is six digits.')
+    .optional()
+    .or(z.literal('')),
 });
 
 export const bookingIdSchema = z.object({

@@ -151,6 +151,7 @@ export async function requestSeat(
     seats = 1,
     luggage = 0,
     note = null,
+    voucher = null,
   }: {
     departureId: string;
     fromSeq: number;
@@ -159,12 +160,13 @@ export async function requestSeat(
     seats?: number;
     luggage?: number;
     note?: string | null;
+    voucher?: string | null;
   },
 ): Promise<string> {
   const rows = await test.asUser<{ request_booking: string }>(
     userId,
-    `select public.request_booking($1, $2, $3, $4, $5, $6)`,
-    [departureId, stops[fromSeq - 1], stops[toSeq - 1], seats, luggage, note],
+    `select public.request_booking($1, $2, $3, $4, $5, $6, $7)`,
+    [departureId, stops[fromSeq - 1], stops[toSeq - 1], seats, luggage, note, voucher],
   );
   return rows[0]!.request_booking;
 }

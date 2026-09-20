@@ -17,6 +17,8 @@ const intercityTabs = [
   { segment: '/routes', label: 'Routes & fares' },
   { segment: '/stops', label: 'Stops' },
   { segment: '/fleet', label: 'Fleet' },
+  { segment: '/insights', label: 'Insights' },
+  { segment: '/promotions', label: 'Promotions' },
   { segment: '/complaints', label: 'Complaints' },
   { segment: '/billing', label: 'Billing' },
   { segment: '/team', label: 'Team' },
@@ -26,8 +28,10 @@ const intercityTabs = [
 /**
  * An in-city business runs no timetable, owns no routes and books no
  * departures — it sells a flat-priced ride from a pickup point to a zone. It
- * was being shown all nine tabs regardless, so its owner landed on Routes &
- * fares, Timetable and Fleet, none of which mean anything to them.
+ * was being shown every intercity tab regardless, so its owner landed on
+ * Routes & fares, Timetable and Fleet, none of which mean anything to them.
+ * Insights and Promotions stay out for the same reason: both are about how
+ * full a departure got, and there are no departures here.
  */
 const incityTabs = [
   { segment: '', label: 'Overview' },

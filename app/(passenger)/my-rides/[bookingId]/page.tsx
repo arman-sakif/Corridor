@@ -28,6 +28,7 @@ type Booking = {
   base_cents: number;
   luggage_cents: number;
   airport_cents: number;
+  discount_cents: number;
   total_cents: number;
   passenger_note: string | null;
   payment_method: PaymentMethod | null;
@@ -59,7 +60,7 @@ export default async function RideDetailPage({
       .from('bookings')
       .select(
         `id, seats, luggage_count, status, hold_expires_at,
-         base_cents, luggage_cents, airport_cents, total_cents, passenger_note,
+         base_cents, luggage_cents, airport_cents, discount_cents, total_cents, passenger_note,
          payment_method, passenger_confirmed_at, driver_confirmed_at,
          from_stop:stops!bookings_from_stop_id_fkey(label, description, city:cities(name)),
          to_stop:stops!bookings_to_stop_id_fkey(label, description, city:cities(name)),
@@ -167,6 +168,12 @@ export default async function RideDetailPage({
             <Line label={`Fare — ${booking.seats} seat${booking.seats === 1 ? '' : 's'}`} cents={booking.base_cents} />
             {booking.luggage_cents > 0 ? <Line label="Extra luggage" cents={booking.luggage_cents} /> : null}
             {booking.airport_cents > 0 ? <Line label="Airport fee" cents={booking.airport_cents} /> : null}
+            {booking.discount_cents > 0 ? (
+              <div className="flex justify-between font-medium text-good-700">
+                <dt>Voucher discount</dt>
+                <dd className="numeric">−{formatCents(booking.discount_cents)}</dd>
+              </div>
+            ) : null}
             <div className="flex justify-between border-t border-ink-100 pt-2 font-semibold text-ink-900">
               <dt>Total</dt>
               <dd className="numeric">{formatCents(booking.total_cents)}</dd>

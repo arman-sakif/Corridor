@@ -64,7 +64,7 @@ asks one of these rather than joining it.
 
 | Function | Defined in | Does |
 |---|---|---|
-| `request_booking()` | `20260829000005_booking.sql`, replaced in `20260829000009_surcharges.sql` | **The capacity function.** Locks the departure, checks every leg, prices server-side with surcharges, inserts the hold. Takes no price. |
+| `request_booking()` | `20260829000005_booking.sql`, replaced in `20260829000009_surcharges.sql`, dropped and recreated in `20260920000030_vouchers.sql` | **The capacity function.** Locks the departure, checks every leg, prices server-side with surcharges, spends a voucher code if one was given, inserts the hold. Takes a code, never a price. |
 | `quote_booking()` | `20260829000009_surcharges.sql` | The same arithmetic, read-only, for the booking page. A quote that disagrees with the charge is worse than none. |
 | `departure_leg_loads()` | `20260829000005_booking.sql` | Seats taken per leg, expired holds excluded inline. |
 | `approve_booking()`, `decline_booking()`, `cancel_booking()` | `20260829000005_booking.sql` | Guarded status transitions. |
@@ -98,3 +98,15 @@ asks one of these rather than joining it.
 | `request_incity_ride()` | `20260830000020_incity.sql` | The local ride. Checks the parent booking, the operator, the zone and the pickup city, then snapshots the zone price. |
 | `approve_incity_ride()`, `decline_incity_ride()`, `cancel_incity_ride()` | `20260830000020_incity.sql` | Guarded status transitions for a local ride. |
 | `cancel_incity_on_parent()` | `20260830000020_incity.sql` | Trigger — a seat that goes away takes its local ride with it. |
+
+## Promotions and insights
+
+| Function | Defined in | Does |
+|---|---|---|
+| `resolve_voucher()` | `20260920000030_vouchers.sql` | The voucher rules, in one place: the code belongs to this operator, is active, unexpired, under its ceiling, and unspent by this passenger. Locks the row when asked to. **Granted to nobody** — both callers are SECURITY DEFINER, and exposing it would be an oracle over every live code. |
+| `voucher_discount_cents()` | `20260920000030_vouchers.sql` | Cents off, or a floored percentage of the fare, capped at the fare. IMMUTABLE. Mirrored for display by `lib/promotions/vouchers.ts`. |
+| `check_voucher()` | `20260920000030_vouchers.sql` | What the booking page asks before the passenger commits. Signed in only: six digits is a small space. |
+| `create_voucher()` | `20260920000030_vouchers.sql` | Generates the six digits and computes the expiry from one of four windows. Neither is a number the browser sends. |
+| `set_voucher_active()` | `20260920000030_vouchers.sql` | Withdraw a code early, or put it back. Never a delete. |
+| `voucher_uses()` | `20260920000030_vouchers.sql` | How far each code has got, counted the way `resolve_voucher()` counts — lapsed holds excluded inline. |
+| `operator_insights()` | `20260920000031_insights.sql` | Per weekday: departures, seats offered, seats taken **at the busiest leg**, how many went out full, fares, discounts, and requests that went nowhere. |

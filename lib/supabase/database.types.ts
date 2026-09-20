@@ -71,6 +71,11 @@ export type ReportCategory =
 export type ReportStatus = 'open' | 'resolved';
 export type FeedbackKind = 'idea' | 'problem' | 'praise' | 'other';
 
+/** Cents off, or whole percent off. `vouchers.value` means one or the other. */
+export type VoucherKind = 'amount' | 'percent';
+/** The four expiry windows an operator may pick from. */
+export type VoucherWindow = '3d' | '7d' | '1m' | '4m';
+
 /**
  * Foreign keys, so an embedded select (`operator:operators(name)`) resolves to
  * the right shape. Generated from the migration rather than typed by hand.
@@ -78,6 +83,22 @@ export type FeedbackKind = 'idea' | 'problem' | 'praise' | 'other';
 type Relationships = {
   profiles: [];
   auth_recovery_requests: [];
+  vouchers: [
+    {
+      foreignKeyName: 'vouchers_operator_id_fkey';
+      columns: ['operator_id'];
+      isOneToOne: false;
+      referencedRelation: 'operators';
+      referencedColumns: ['id'];
+    },
+    {
+      foreignKeyName: 'vouchers_created_by_fkey';
+      columns: ['created_by'];
+      isOneToOne: false;
+      referencedRelation: 'profiles';
+      referencedColumns: ['id'];
+    },
+  ];
   subscription_payments: [
     {
       foreignKeyName: 'subscription_payments_operator_id_fkey';
@@ -350,6 +371,13 @@ type Relationships = {
       columns: ['assigned_vehicle_id'];
       isOneToOne: false;
       referencedRelation: 'vehicles';
+      referencedColumns: ['id'];
+    },
+    {
+      foreignKeyName: 'bookings_voucher_id_fkey';
+      columns: ['voucher_id'];
+      isOneToOne: false;
+      referencedRelation: 'vouchers';
       referencedColumns: ['id'];
     },
   ];
@@ -768,6 +796,8 @@ export interface Database {
           base_cents: number;
           luggage_cents: number;
           airport_cents: number;
+          voucher_id: string | null;
+          discount_cents: number;
           total_cents: number;
           passenger_note: string | null;
           assigned_vehicle_id: string | null;
@@ -783,6 +813,8 @@ export interface Database {
         | 'luggage_count'
         | 'luggage_cents'
         | 'airport_cents'
+        | 'voucher_id'
+        | 'discount_cents'
         | 'passenger_note'
         | 'assigned_vehicle_id'
         | 'payment_method'
@@ -822,6 +854,25 @@ export interface Database {
         },
         'note' | 'created_by',
         'id' | 'created_at'
+      >;
+      vouchers: Table<
+        'vouchers',
+        {
+          id: string;
+          operator_id: string;
+          /** Exactly six digits. Leading zeros are part of it, so never a number. */
+          code: string;
+          kind: VoucherKind;
+          /** Cents off when `kind` is 'amount', whole percent when 'percent'. */
+          value: number;
+          validity: VoucherWindow;
+          expires_at: string;
+          max_uses: number;
+          is_active: boolean;
+          created_by: string | null;
+        } & Timestamps,
+        'is_active' | 'created_by',
+        'id' | 'created_at' | 'updated_at'
       >;
       incity_zones: Table<
         'incity_zones',
@@ -904,6 +955,8 @@ export interface Database {
           p_seats: number;
           p_luggage_count: number;
           p_passenger_note: string | null;
+          /** A six-digit code, or nothing. Never an amount — see §5.3. */
+          p_voucher_code?: string | null;
         };
         Returns: string;
       };
@@ -975,6 +1028,54 @@ export interface Database {
         Args: { p_mode: 'passenger' | 'driver'; p_enabled: boolean };
         Returns: undefined;
       };
+      create_voucher: {
+        Args: {
+          p_operator_id: string;
+          p_kind: VoucherKind;
+          p_value: number;
+          p_window: VoucherWindow;
+          p_max_uses: number;
+        };
+        /** The generated six-digit code. */
+        Returns: string;
+      };
+      set_voucher_active: {
+        Args: { p_voucher_id: string; p_active: boolean };
+        Returns: undefined;
+      };
+      check_voucher: {
+        Args: { p_departure_id: string; p_code: string };
+        Returns: {
+          code: string;
+          kind: VoucherKind;
+          value: number;
+          expires_at: string;
+        }[];
+      };
+      voucher_uses: {
+        Args: { p_operator_id: string };
+        Returns: { voucher_id: string; uses: number; discount_cents: number }[];
+      };
+      operator_insights: {
+        Args: { p_operator_id: string; p_from: string; p_to: string };
+        /**
+         * One row per weekday that had a departure in the window, 0 = Sunday.
+         * `seats_taken` is the sum of each departure's BUSIEST leg — capacity
+         * is per leg, so that is what "full" means.
+         */
+        Returns: {
+          dow: number;
+          departures: number;
+          seats_offered: number;
+          seats_taken: number;
+          full_departures: number;
+          bookings: number;
+          passengers: number;
+          fares_cents: number;
+          discount_cents: number;
+          turned_away: number;
+        }[];
+      };
     };
     Enums: {
       platform_role: PlatformRole;
@@ -994,6 +1095,8 @@ export interface Database {
       report_status: ReportStatus;
       feedback_kind: FeedbackKind;
       incity_booking_status: IncityBookingStatus;
+      voucher_kind: VoucherKind;
+      voucher_window: VoucherWindow;
     };
     CompositeTypes: Record<string, never>;
   };

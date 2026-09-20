@@ -91,7 +91,7 @@ app/
   (passenger)/   my rides and history, booking detail, the local ride,
                  notifications, profile, reports, feedback
   (operator)/    setup, requests and history, departures, fleet, team, zones,
-                 in-city requests, complaints, billing
+                 in-city requests, insights, promotions, complaints, billing
   (driver)/      trips, manifest
   (admin)/       operator vetting, cities, subscriptions, complaints, feedback
   api/           manifest CSV export, the daily housekeeping job
@@ -103,7 +103,8 @@ lib/
   auth/          session, account types, sign-in, recovery
   booking/       fares, capacity, seat map, ride lists, search, booking and
                  departure-day actions
-  operator/      setup actions
+  operator/      setup actions, insights shaping, dashboard queries
+  promotions/    voucher codes — creation, redemption checks, the display math
   incity/        the in-city add-on — isolated
   notifications/ the in-app list
   reports/       complaints and feedback
@@ -128,7 +129,9 @@ Two rules about these boundaries:
   In-city is an add-on with its own approval; it must be removable without
   touching the core booking flow.
 - **`lib/booking` owns fare interpretation.** `pricing_mode` is read in exactly
-  one place. No other module decides what a segment costs.
+  one place. No other module decides what a segment costs. A voucher does not
+  change that: `lib/promotions` takes a discount off the total the fare module
+  produced, and never asks how that total was reached.
 
 ---
 
@@ -159,6 +162,7 @@ synonyms.
 | **Feedback** | Product feedback from anyone signed in. Admins only. |
 | **Notification** | An in-app row plus an email. Credentials are emailed and never filed. |
 | **Account type** | Which hat a signed-in person is wearing: passenger, driver, operator or admin. See §6. |
+| **Voucher** | A six-digit code one operator issues, worth a fixed amount or a percentage off a fare. Expires on one of four windows, has a ceiling, and can be spent once per passenger. |
 
 The full schema is in [`supabase/migrations`](../supabase/migrations). A few
 shape decisions worth stating outright:
@@ -273,6 +277,21 @@ fare changes never rewrite history. A price sent by the client is ignored.
 Fare changes need no approval, but each one writes a `fare_changes` row with a
 required reason ("fuel prices", "winter traffic"). Recorded, never enforced.
 
+A **voucher** is the only thing that moves a total after the fare is computed,
+and it moves it the way everything else here does. `request_booking()` takes a
+six-digit code — never an amount — resolves it against the operator that issued
+it, and snapshots `discount_cents` onto the booking beside the rest of the
+breakdown. `bookings_total_is_sum` widened to `base + luggage + airport −
+discount`, with a companion constraint keeping the discount from exceeding what
+came before it, so a total can reach zero and go no further. A code that is
+wrong, withdrawn, expired or already spent stops the booking with a message
+saying which: charging full price for a trip somebody believed was discounted is
+the one outcome worth refusing outright.
+
+A use is counted the way a seat is. `resolve_voucher()` excludes lapsed holds
+inline, so an hour of indecision gives the use back whether or not any sweep has
+run — the same self-healing rule as §4.2, for the same reason.
+
 In the operator UI, explain the two modes with a worked example — never with the
 words "matrix" and "additive".
 
@@ -324,7 +343,7 @@ repeat offenders.
 |---|---|
 | **Passenger** | Search, request a seat, cancel, view rides and history, confirm payment, rate the operator, add a local ride, report a trip, send feedback. |
 | **Driver** | See assigned departures, view and download the manifest, mark no-shows, confirm payment received, rate or flag a passenger on a trip they drove. |
-| **Operator staff/owner** | Everything for their own operator: stops, routes, fares, schedules, vehicles, team and invites, approve/decline, assign vehicles, view passenger history, rate passengers, raise red flags, complaints, billing. |
+| **Operator staff/owner** | Everything for their own operator: stops, routes, fares, schedules, vehicles, team and invites, approve/decline, assign vehicles, view passenger history, rate passengers, raise red flags, complaints, billing, insights, voucher codes. |
 | **Platform admin** | Vet and activate operators, manage cities, manage subscriptions, suspend operators, read every complaint and all feedback. |
 
 ### Account types
@@ -436,6 +455,7 @@ Each phase should be usable before the next begins.
 | **5** | Departure day: vehicle assignment, driver dashboard, manifest, completion, payment confirmation, ratings, red flags | **built** |
 | **6** | In-city add-on: zones, checkout add-on, separate approval | **built** |
 | **7** | Subscription tracking, then mobile apps | tracking **built**; mobile not started |
+| **8** | Operator insights (how full, by weekday) and promotions (voucher codes) | **built** |
 
 **Phases 0–5 are the MVP** — a complete, sellable product: onboard an operator,
 publish a timetable, take real bookings, run the day, settle payment.

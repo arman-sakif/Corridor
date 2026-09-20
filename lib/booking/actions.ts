@@ -45,6 +45,10 @@ export async function requestSeat(_prev: FormState, formData: FormData): Promise
     p_seats: parsed.data.seats,
     p_luggage_count: parsed.data.luggage_count,
     p_passenger_note: parsed.data.passenger_note || null,
+    // A code, never an amount. A wrong or spent one stops the booking with a
+    // message saying which — quietly charging full price for a trip somebody
+    // thought was discounted is the worst of the available outcomes.
+    p_voucher_code: parsed.data.voucher_code || null,
   });
 
   if (error || !bookingId) {

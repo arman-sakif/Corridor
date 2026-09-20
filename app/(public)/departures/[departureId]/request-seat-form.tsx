@@ -1,13 +1,16 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useState, useTransition } from 'react';
 
 import { requestSeat } from '@/lib/booking/actions';
+import { checkVoucher } from '@/lib/promotions/actions';
 import { FormMessage, SubmitButton, fieldError } from '@/components/form';
-import { Card, Field, Input, Select, Textarea } from '@/components/ui';
-import { IconLuggage, IconSeat } from '@/components/icons';
+import { Button, Card, Field, Input, Select, Textarea } from '@/components/ui';
+import { IconLuggage, IconSeat, IconTicket } from '@/components/icons';
 import { idleState } from '@/lib/forms';
 import { formatCents } from '@/lib/money';
+import { describeVoucher, voucherDiscountCents } from '@/lib/promotions/vouchers';
+import type { VoucherKind } from '@/lib/supabase/database.types';
 import type { SurchargePolicy } from '@/lib/booking/fares';
 
 type Stop = {
@@ -46,6 +49,14 @@ export function RequestSeatForm({
   const [seats, setSeats] = useState(1);
   const [bags, setBags] = useState(1);
 
+  // The code the passenger typed, and what the operator says it is worth. The
+  // second is display only: request_booking() resolves the code again, holding
+  // the row, and that is the answer they are charged.
+  const [code, setCode] = useState('');
+  const [voucher, setVoucher] = useState<{ kind: VoucherKind; value: number } | null>(null);
+  const [voucherNote, setVoucherNote] = useState<string | null>(null);
+  const [checking, startChecking] = useTransition();
+
   const selected =
     boardings.find((b) => `${b.from.stopId}:${b.to.stopId}` === choice) ?? boardings[0];
 
@@ -61,7 +72,31 @@ export function RequestSeatForm({
     selected && (selected.from.isAirport || selected.to.isAirport)
       ? surcharges.airportFeeCents * seats
       : 0;
-  const total = base + luggage + airport;
+  const beforeDiscount = base + luggage + airport;
+  const discount = voucher
+    ? voucherDiscountCents(voucher.kind, voucher.value, beforeDiscount)
+    : 0;
+  const total = beforeDiscount - discount;
+
+  function applyCode() {
+    const typed = code.trim();
+    if (!typed) {
+      setVoucher(null);
+      setVoucherNote(null);
+      return;
+    }
+
+    startChecking(async () => {
+      const result = await checkVoucher(departureId, typed);
+      if (result.ok) {
+        setVoucher({ kind: result.kind, value: result.value });
+        setVoucherNote(`${describeVoucher(result.kind, result.value, formatCents)} applied.`);
+      } else {
+        setVoucher(null);
+        setVoucherNote(result.message);
+      }
+    });
+  }
 
   return (
     <Card className="p-5">
@@ -156,6 +191,56 @@ export function RequestSeatForm({
           </Field>
         </div>
 
+        {/*
+          The code is submitted with the form whether or not Check was pressed,
+          so a passenger who types one and goes straight to the button still
+          gets their discount. Check only answers "did that work?" before they
+          commit — and a code that does not work stops the booking with a
+          reason rather than quietly charging full price.
+        */}
+        <Field
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              <IconTicket className="text-sm text-ink-400" />
+              Voucher code (optional)
+            </span>
+          }
+          hint="Six digits, from the operator. One booking per code."
+          error={fieldError(state, 'voucher_code')}
+        >
+          <div className="flex gap-2">
+            <Input
+              name="voucher_code"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="123456"
+              autoComplete="off"
+              className="numeric tracking-[0.2em]"
+              value={code}
+              onChange={(event) => {
+                setCode(event.target.value.replace(/\D/g, '').slice(0, 6));
+                setVoucher(null);
+                setVoucherNote(null);
+              }}
+            />
+            <Button
+              type="button"
+              tone="secondary"
+              onClick={applyCode}
+              disabled={checking || code.length !== 6}
+              className="shrink-0"
+            >
+              {checking ? 'Checking…' : 'Check'}
+            </Button>
+          </div>
+        </Field>
+
+        {voucherNote ? (
+          <p className={'-mt-3 text-sm ' + (voucher ? 'text-good-700' : 'text-bad-700')}>
+            {voucherNote}
+          </p>
+        ) : null}
+
         <Field
           label="Anything to tell the operator? (optional)"
           hint="For example: female driver preferred, or front seat if possible."
@@ -183,6 +268,12 @@ export function RequestSeatForm({
             <div className="flex justify-between text-ink-600">
               <dt>Airport fee</dt>
               <dd className="numeric">{formatCents(airport)}</dd>
+            </div>
+          ) : null}
+          {discount > 0 ? (
+            <div className="flex justify-between font-medium text-good-700">
+              <dt>Voucher {code}</dt>
+              <dd className="numeric">−{formatCents(discount)}</dd>
             </div>
           ) : null}
           <div className="mt-1 flex items-baseline justify-between border-t border-ink-200 pt-2.5 font-semibold text-ink-900">

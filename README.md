@@ -39,7 +39,7 @@ are the MVP; 6 and 7 followed.
 | 6 | In-city add-on: zones, the checkout add-on, separate approval | **built** |
 | 7 | Subscription tracking | **built** · mobile apps not started |
 
-Beyond the seven phases, five things were added because the product needed
+Beyond the seven phases, seven things were added because the product needed
 them rather than because a roadmap asked:
 
 | | |
@@ -49,6 +49,8 @@ them rather than because a roadmap asked:
 | **Notifications** | An in-app list with an unread badge, plus email. The in-app half is the one that works — see the sender note below. |
 | **Complaints** | A passenger reports a *trip*; the operator and a platform admin are both told, and either can close it with a note the passenger sees. The other direction stays a red flag, which the assigned driver can now raise too. |
 | **Feedback** | Anyone signed in can send an idea or an annoyance from *Tell us*; admins read them at `/admin/feedback`. |
+| **Insights** | An operator sees how full their departures actually ran, broken down by day of the week, over 30 days, 90 days or a year. Fullness is measured on each departure's **busiest leg**, because that is what capacity means here — a van that carried Windsor→London and then London→Yorkdale sold two seats and was never more than a quarter full. It names the fullest and emptiest weekday and stops there; what to do about a quiet Tuesday is the operator's call. |
+| **Promotions** | An operator generates a six-digit voucher code worth a set amount or a percentage off, lasting 3 days, 7 days, 1 month or 4 months, with a ceiling on how many bookings can use it. A passenger types it when they request a seat. The code is scoped to the business that issued it, spendable once per passenger, and a lapsed hold gives its use straight back. |
 
 Not yet wired: Google OAuth, which needs credentials — so its buttons are
 greyed out and lead to a short page saying so. Everything else in the code path
@@ -245,8 +247,8 @@ free themselves whether or not the sweep has run.
 |---|---|
 | `npm run dev` | Development server. |
 | `npm run build` | Production build, including a full typecheck. |
-| `npm test` | Everything — unit tests and the database tests. 250 tests, about two minutes. |
-| `npm run test:unit` | The pure modules: fares, capacity, money, time, account types, ride lists, seat map, paging. Fast. |
+| `npm test` | Everything — unit tests and the database tests. 299 tests, about two minutes. |
+| `npm run test:unit` | The pure modules: fares, capacity, money, time, account types, ride lists, seat map, paging, vouchers, insights. Fast. |
 | `npm run test:db` | The real migrations against real Postgres. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm run lint` | oxlint. See [`docs/linting.md`](docs/linting.md) for why it is not ESLint. |
@@ -298,7 +300,7 @@ app/
   (passenger)/   my rides and history, booking detail, the local ride,
                  notifications, profile and account types, reports, feedback
   (operator)/    setup, requests and history, departures, fleet, team, zones,
-                 in-city requests, complaints, billing
+                 in-city requests, insights, promotions, complaints, billing
   (driver)/      trips, manifest, flagging and rating a passenger
   (admin)/       operator vetting, cities, subscriptions, complaints, feedback
   api/           manifest CSV, the daily job
@@ -313,7 +315,9 @@ lib/
                  departure-day actions
   incity/        the local-ride add-on — isolated, imported by nothing else
   notifications/ reading the in-app list
-  operator/      setup actions, paging through GoTrue's user list
+  operator/      setup actions, insights shaping, dashboard queries, paging
+                 through GoTrue's user list
+  promotions/    voucher codes — creation, redemption checks, display math
   reports/       complaints and feedback
   supabase/      clients, types, and rows()/one()/count() for every read
   validation/    zod schemas
