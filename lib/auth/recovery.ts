@@ -10,6 +10,7 @@ import { getViewer, requireViewer } from '@/lib/auth/session';
 import { dynamicRoute } from '@/lib/routes';
 import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
 import { notify } from '@/lib/notify';
+import { clearFailedSignIns, recordFailedSignIn, signInAllowed } from '@/lib/auth/throttle';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { loginCodeSchema, recoveryRequestSchema, updatePasswordSchema } from '@/lib/validation/auth';
@@ -139,6 +140,13 @@ export async function verifyLoginCode(_prev: FormState, formData: FormData): Pro
   const parsed = parseForm(loginCodeSchema, formData);
   if (!parsed.ok) return parsed.state;
 
+  // A sign-in code is a credential like any other, and eight digits is a
+  // smaller space than a password. It shares the sign-in counter rather than
+  // getting its own: somebody working through codes and somebody working
+  // through passwords are the same person doing the same thing.
+  const verdict = await signInAllowed(parsed.data.email);
+  if (!verdict.allowed) return fail(verdict.message);
+
   // The request-scoped client, not the admin one: this is what writes the
   // session cookie that keeps them signed in afterwards.
   const supabase = await createClient();
@@ -152,10 +160,13 @@ export async function verifyLoginCode(_prev: FormState, formData: FormData): Pro
   });
 
   if (error) {
+    await recordFailedSignIn(parsed.data.email);
     return fail(
       'That code did not work. It may have expired, or have a digit out of place — ask for a new one and try again.',
     );
   }
+
+  await clearFailedSignIns(parsed.data.email);
 
   // Signing in by code is still signing in: someone with more than one account
   // type is asked which, once their new password is set or skipped.

@@ -505,15 +505,176 @@ describe('checking a code before committing', () => {
     assert.equal(row?.value, 700, `${spelled} should resolve to ${code}`);
   });
 
+  /**
+   * It returns the reason rather than raising, and that is not cosmetic:
+   * PostgREST rolls the transaction back when a function raises, so the row
+   * recording the failed attempt would be rolled back with it and the throttle
+   * below would count to zero forever.
+   */
   it('says a code is six letters or numbers rather than pretending to look it up', async () => {
     const rider = await passenger(test, 'Typo');
+    const [row] = await test.asUser<{ error: string | null; value: number | null }>(
+      rider,
+      `select error, value from public.check_voucher($1, $2)`,
+      [corridor.departureId, 'FREE'],
+    );
+
+    assert.match(row!.error ?? '', /six letters or numbers/);
+    assert.equal(row!.value, null);
+  });
+
+  it('names the reason a real code was refused, without raising', async () => {
+    const code = await createVoucher(test, corridor);
+    await test.raw(
+      `update public.vouchers set is_active = false where operator_id = $1 and code = $2`,
+      [corridor.operatorId, code],
+    );
+
+    const rider = await passenger(test, 'Refused');
+    const [row] = await test.asUser<{ error: string | null }>(
+      rider,
+      `select error from public.check_voucher($1, $2)`,
+      [corridor.departureId, code],
+    );
+
+    assert.match(row!.error ?? '', /withdrawn/);
+  });
+});
+
+describe('guessing at codes', () => {
+  let test: TestDb;
+  let corridor: Corridor;
+
+  before(async () => {
+    test = await migratedDatabase();
+    corridor = await seedCorridor(test, { maxSeats: 20 });
+  });
+
+  after(async () => test.close());
+
+  const guess = async (userId: string, code: string) => {
+    const [row] = await test.asUser<{ error: string | null }>(
+      userId,
+      `select error from public.check_voucher($1, $2)`,
+      [corridor.departureId, code],
+    );
+    return row?.error ?? null;
+  };
+
+  const attemptsFor = async (userId: string) => {
+    const [row] = await test.raw<{ n: number }>(
+      `select count(*)::int as n from public.voucher_attempts where user_id = $1`,
+      [userId],
+    );
+    return row!.n;
+  };
+
+  it('records a miss, which is the whole point of not raising', async () => {
+    const guesser = await passenger(test, 'Counter');
+    await guess(guesser, 'ZZZZZZ');
+
+    assert.equal(await attemptsFor(guesser), 1, 'a rolled-back insert would leave 0');
+  });
+
+  it('shuts the oracle after ten misses', async () => {
+    const guesser = await passenger(test, 'Enumerator');
+
+    for (let i = 0; i < 10; i += 1) {
+      const error = await guess(guesser, `ZZZZZ${i}`);
+      assert.match(error ?? '', /not one this operator has issued/, `guess ${i + 1}`);
+    }
+
+    const eleventh = await guess(guesser, 'ZZZZZA');
+    assert.match(eleventh ?? '', /Too many codes tried/);
+  });
+
+  it('stops telling a locked-out guesser anything, even about a real code', async () => {
+    const guesser = await passenger(test, 'Locked Out');
+    const code = await createVoucher(test, corridor);
+
+    for (let i = 0; i < 10; i += 1) await guess(guesser, `YYYYY${i}`);
+
+    // The code is live and would otherwise resolve. Once the counter is spent
+    // the answer is the same for a hit as for a miss, which is what makes it
+    // useless to enumerate with.
+    assert.match((await guess(guesser, code)) ?? '', /Too many codes tried/);
+  });
+
+  it('throttles one passenger without touching anyone else', async () => {
+    const noisy = await passenger(test, 'Noisy');
+    const quiet = await passenger(test, 'Quiet');
+    const code = await createVoucher(test, corridor);
+
+    for (let i = 0; i < 10; i += 1) await guess(noisy, `XXXXX${i}`);
+
+    assert.match((await guess(noisy, code)) ?? '', /Too many codes tried/);
+    assert.equal(await guess(quiet, code), null, 'the quiet one is unaffected');
+  });
+
+  it('forgives the fumbles once a code comes back right', async () => {
+    const fumbler = await passenger(test, 'Fumbler');
+    const code = await createVoucher(test, corridor);
+
+    await guess(fumbler, 'WWWWW1');
+    await guess(fumbler, 'WWWWW2');
+    assert.equal(await attemptsFor(fumbler), 2);
+
+    assert.equal(await guess(fumbler, code), null, 'the real code still works');
+    assert.equal(await attemptsFor(fumbler), 0, 'getting it right clears the strikes');
+  });
+
+  /**
+   * Being turned away for knocking too often is not another knock. Counting it
+   * would renew the lockout for as long as somebody kept prodding the form,
+   * and "wait an hour" would be a lie told by the only message they have.
+   */
+  it('does not extend the lockout each time a locked-out caller tries again', async () => {
+    const persistent = await passenger(test, 'Persistent');
+
+    for (let i = 0; i < 10; i += 1) await guess(persistent, `TTTTT${i}`);
+    assert.equal(await attemptsFor(persistent), 10);
+
+    for (let i = 0; i < 15; i += 1) await guess(persistent, `SSSSS${i}`);
+    assert.equal(await attemptsFor(persistent), 10, 'still ten, not twenty-five');
+  });
+
+  it('lets the counter age out of the window', async () => {
+    const yesterday = await passenger(test, 'Yesterday');
+    for (let i = 0; i < 10; i += 1) await guess(yesterday, `VVVVV${i}`);
+    assert.match((await guess(yesterday, 'VVVVVA')) ?? '', /Too many codes tried/);
+
+    await test.raw(
+      `update public.voucher_attempts set attempted_at = now() - interval '2 hours'
+        where user_id = $1`,
+      [yesterday],
+    );
+
+    assert.match(
+      (await guess(yesterday, 'VVVVVB')) ?? '',
+      /not one this operator has issued/,
+      'an hour later they are back to ordinary refusals',
+    );
+  });
+
+  it('gates the booking path on the same counter', async () => {
+    // request_booking cannot record a miss — it raises, and the raise rolls the
+    // row back — but it reads the same count, so a guesser who burned the
+    // allowance on check_voucher cannot carry on through the booking form.
+    const guesser = await passenger(test, 'Both Paths');
+    const code = await createVoucher(test, corridor);
+
+    for (let i = 0; i < 10; i += 1) await guess(guesser, `UUUUU${i}`);
+
     await assert.rejects(
       () =>
-        test.asUser(rider, `select * from public.check_voucher($1, $2)`, [
-          corridor.departureId,
-          'FREE',
-        ]),
-      /six letters or numbers/,
+        requestSeat(test, guesser, {
+          departureId: corridor.departureId,
+          fromSeq: 1,
+          toSeq: 4,
+          stops: corridor.stops,
+          voucher: code,
+        }),
+      /Too many codes tried/,
     );
   });
 });

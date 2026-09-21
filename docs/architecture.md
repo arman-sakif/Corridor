@@ -493,6 +493,24 @@ matching algorithm, driver-posted rides, and multi-operator connecting trips
   become real, with Resend as custom SMTP.
 - **Search display.** The headline price includes the airport fee. If more
   surcharge types appear, revisit whether one number can stay honest.
+- **Rate limits are counted in the app, not delegated.** GoTrue refuses too
+  many attempts from one IP, but sign-in runs in a Server Action, so the IP it
+  sees is the Vercel function's and every sign-in on the site shares one
+  bucket — which is worse than no limit in one specific way: anyone who wants
+  the site down need only spend the shared allowance. And it counts per IP and
+  never per account, so password spraying was unthrottled. `lib/auth/throttle.ts`
+  counts both (10 per address and 40 per caller in 15 minutes), and
+  `resolve_voucher()` counts voucher guesses per account (10 an hour). Subjects
+  are SHA-256 hashes; in the clear these tables would be a roster of which
+  addresses have been tried and a log of who was where. All three counter
+  tables have RLS on and no policy — a passenger who could delete from one
+  could reset their own throttle.
+
+  Two things are **not** done and are worth more than either: CAPTCHA on the
+  auth forms, and leaked-password protection. Steps for both are in the README
+  under *Resisting a guesser*. Until CAPTCHA is on, accounts can be minted in
+  bulk, which is what makes the per-account counters the weaker half of the
+  pair.
 - **Vouchers are intercity only.** `create_voucher()` refuses an in-city
   operator outright rather than half-building it: a local ride is a separate
   flow with its own approval, and giving it codes means giving it its own

@@ -75,6 +75,8 @@ export type FeedbackKind = 'idea' | 'problem' | 'praise' | 'other';
 export type VoucherKind = 'amount' | 'percent';
 /** The four expiry windows an operator may pick from. */
 export type VoucherWindow = '3d' | '7d' | '1m' | '4m';
+/** Which counter a failed sign-in is recorded against. */
+export type AuthAttemptKind = 'email' | 'ip';
 
 /**
  * Foreign keys, so an embedded select (`operator:operators(name)`) resolves to
@@ -83,6 +85,16 @@ export type VoucherWindow = '3d' | '7d' | '1m' | '4m';
 type Relationships = {
   profiles: [];
   auth_recovery_requests: [];
+  auth_sign_in_attempts: [];
+  voucher_attempts: [
+    {
+      foreignKeyName: 'voucher_attempts_user_id_fkey';
+      columns: ['user_id'];
+      isOneToOne: false;
+      referencedRelation: 'profiles';
+      referencedColumns: ['id'];
+    },
+  ];
   vouchers: [
     {
       foreignKeyName: 'vouchers_operator_id_fkey';
@@ -581,6 +593,16 @@ export interface Database {
         { email_hash: string; requested_at: string },
         'requested_at'
       >;
+      auth_sign_in_attempts: Table<
+        'auth_sign_in_attempts',
+        { kind: AuthAttemptKind; subject_hash: string; attempted_at: string },
+        'attempted_at'
+      >;
+      voucher_attempts: Table<
+        'voucher_attempts',
+        { user_id: string; attempted_at: string },
+        'attempted_at'
+      >;
       profiles: Table<
         'profiles',
         {
@@ -1045,11 +1067,17 @@ export interface Database {
       };
       check_voucher: {
         Args: { p_departure_id: string; p_code: string };
+        /**
+         * One row either way. A refused code comes back with `error` set and
+         * the rest null rather than raising — returning normally is what lets
+         * it record the attempt against the caller's throttle.
+         */
         Returns: {
-          code: string;
-          kind: VoucherKind;
-          value: number;
-          expires_at: string;
+          code: string | null;
+          kind: VoucherKind | null;
+          value: number | null;
+          expires_at: string | null;
+          error: string | null;
         }[];
       };
       voucher_uses: {
@@ -1097,6 +1125,7 @@ export interface Database {
       incity_booking_status: IncityBookingStatus;
       voucher_kind: VoucherKind;
       voucher_window: VoucherWindow;
+      auth_attempt_kind: AuthAttemptKind;
     };
     CompositeTypes: Record<string, never>;
   };

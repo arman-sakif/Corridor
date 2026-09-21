@@ -231,6 +231,56 @@ create a project with that setting on, the app still works — you just have
 Supabase's defaults underneath. `supabase/tests/grants.test.ts` describes the
 intended state either way.
 
+### Resisting a guesser
+
+Three things stand in front of somebody trying passwords or voucher codes, and
+**two of them are in this repo while two are console settings that are not**.
+The two that are not are the more valuable pair; do them.
+
+**In the repo.** Failed sign-ins are counted per account and per caller
+(`lib/auth/throttle.ts`, 10 per address and 40 per IP in a quarter of an hour),
+and failed voucher codes are counted per account inside `resolve_voucher()`
+(10 an hour). Neither delegates to Supabase's own limit, because sign-in runs
+in a Server Action: GoTrue sees the Vercel function's address, not the
+caller's, so every sign-in on the site shares one bucket and anyone can spend
+it on everybody else's behalf. Subjects are stored as SHA-256 hashes — in the
+clear these tables would be a roster of which addresses have been tried and a
+log of who was where.
+
+**Still to do — 1. Turn on CAPTCHA.** This is the single highest-value change
+left, because it is the only one that also stops accounts being minted in bulk
+(signup is open and email confirmation is off, deliberately — see the note
+above).
+
+1. Create a site at [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile)
+   (free, no card) and copy the **site key** and **secret key**.
+2. **Supabase → Authentication → Attack Protection → Enable CAPTCHA
+   protection**: choose *Turnstile*, paste the secret key, save.
+3. Add the site key as `NEXT_PUBLIC_TURNSTILE_SITE_KEY` in Vercel *and*
+   `.env.local`.
+4. Render the widget on `/sign-in`, `/sign-up` and `/forgot-password`, and pass
+   the token it yields:
+   ```ts
+   await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } });
+   ```
+   Every entry point needs it. Supabase rejects an un-tokened call once the
+   setting is on, so `scripts/auth-loop.mjs` and `scripts/seed.mjs` will start
+   failing — both sign in directly. Keep a second project, or add a bypass for
+   the service role, before turning it on.
+
+**Still to do — 2. Leaked-password protection.** **Supabase → Authentication →
+Attack Protection → Prevent use of leaked passwords.** It checks new passwords
+against HaveIBeenPwned's k-anonymity API, so nothing leaves as plaintext. No
+code change; it applies at signup and password change, not to existing
+passwords. It is a **Pro plan** feature — if the project stays on Free, the
+nearest free substitute is to widen the common-password list in
+`lib/auth/password-strength.ts` and make it a gate rather than a meter, which
+is a much weaker thing and worth being honest about.
+
+While in that screen, both of these are worth a look too: the sign-in and
+sign-up **rate limits** can be lowered from their defaults, and **Auth →
+Sessions** confirms the 400-day cookie this project sets deliberately.
+
 ### The daily job
 
 `/api/cron` rolls the 30-day departure window forward and relabels lapsed
@@ -250,7 +300,7 @@ free themselves whether or not the sweep has run.
 |---|---|
 | `npm run dev` | Development server. |
 | `npm run build` | Production build, including a full typecheck. |
-| `npm test` | Everything — unit tests and the database tests. 307 tests, about two minutes. |
+| `npm test` | Everything — unit tests and the database tests. 323 tests, about two minutes. |
 | `npm run test:unit` | The pure modules: fares, capacity, money, time, account types, ride lists, seat map, paging, vouchers, insights. Fast. |
 | `npm run test:db` | The real migrations against real Postgres. |
 | `npm run typecheck` | `tsc --noEmit`. |

@@ -97,6 +97,9 @@ export async function checkVoucher(
     p_code: parsed.data.code,
   });
 
+  // A raise here is one of the two the function still makes — not signed in,
+  // or no such departure. A refused *code* comes back as a row with `error`
+  // set, because returning normally is what lets it record the attempt.
   if (error) {
     return { ok: false, message: error.message };
   }
@@ -105,6 +108,9 @@ export async function checkVoucher(
   if (!voucher) {
     return { ok: false, message: 'That code is not one this operator has issued.' };
   }
+  if (voucher.error) {
+    return { ok: false, message: voucher.error };
+  }
 
-  return { ok: true, code: voucher.code, kind: voucher.kind, value: voucher.value };
+  return { ok: true, code: voucher.code!, kind: voucher.kind!, value: voucher.value! };
 }

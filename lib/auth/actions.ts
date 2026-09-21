@@ -9,6 +9,7 @@ import { dynamicRoute, externalUrl } from '@/lib/routes';
 import { getViewer } from '@/lib/auth/session';
 import { fail, parseForm, succeed, type FormState } from '@/lib/forms';
 import { checkContactAvailable } from '@/lib/auth/contact-uniqueness';
+import { clearFailedSignIns, recordFailedSignIn, signInAllowed } from '@/lib/auth/throttle';
 import { createClient } from '@/lib/supabase/server';
 import { siteUrl } from '@/lib/supabase/env';
 import { profileSchema, signInSchema, signUpSchema } from '@/lib/validation/auth';
@@ -20,6 +21,12 @@ export async function signInWithPassword(
   const parsed = parseForm(signInSchema, formData);
   if (!parsed.ok) return parsed.state;
 
+  // Counted here rather than left to GoTrue, which sees this Server Action's
+  // IP instead of the caller's and so pools every sign-in on the site into one
+  // bucket. See `lib/auth/throttle.ts`.
+  const verdict = await signInAllowed(parsed.data.email);
+  if (!verdict.allowed) return fail(verdict.message);
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
@@ -27,10 +34,19 @@ export async function signInWithPassword(
   });
 
   if (error) {
+    // A 429 from GoTrue is its own shared-bucket limit, not a wrong password,
+    // and counting it would let one noisy caller run up the counter on an
+    // account belonging to somebody else entirely.
+    if (error.status !== 429) await recordFailedSignIn(parsed.data.email);
+
     // Deliberately vague about which half was wrong: saying "no account with
-    // that email" tells a stranger which addresses are registered.
+    // that email" tells a stranger which addresses are registered. Failures are
+    // counted for unknown addresses too, so the lockout sentence stays just as
+    // vague — it would otherwise confirm which addresses are worth trying.
     return fail('That email and password do not match an account.');
   }
+
+  await clearFailedSignIns(parsed.data.email);
 
   // Someone with more than one account type is asked which to use.
   const viewer = await getViewer();

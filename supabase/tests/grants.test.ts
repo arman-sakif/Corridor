@@ -139,13 +139,15 @@ describe('function grants', () => {
         order by 1`,
     );
 
-    // One deliberate exception left. The recovery throttle is reached only by
-    // a Server Action holding the secret key — there is no row on it any
-    // signed-in user should ever see. The in-city tables left this list when
+    // Three deliberate exceptions, and all three are rate-limit counters.
+    // Each is reached only by something holding the secret key or running as
+    // the owner, and there is no row on any of them a signed-in user should
+    // see — least of all `voucher_attempts`, where a delete would be somebody
+    // resetting their own throttle. The in-city tables left this list when
     // Phase 6 was built.
     assert.deepEqual(
       policyless.map((row) => row.relname),
-      ['auth_recovery_requests'],
+      ['auth_recovery_requests', 'auth_sign_in_attempts', 'voucher_attempts'],
     );
   });
 });
