@@ -50,6 +50,7 @@ supabase-creds.txt
 # local agent workspace and project brief (kept out of the repo by request)
 /.claude/
 /CLAUDE.md
+/.grok/
 
 # local-only notes and account list
 /_local/
