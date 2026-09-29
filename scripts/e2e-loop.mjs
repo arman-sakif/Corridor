@@ -104,9 +104,18 @@ async function main() {
       operator.status === 'active' &&
       operator.slug !== primary?.slug,
   );
-  if (!primary?.ownerEmail || !primary.drivers?.[0]?.[0] || !rival?.ownerEmail || !rival.name) {
+  const showcaseDriver = primary?.drivers?.[0];
+  const showcaseVehicle = primary?.vehicles?.[0];
+  if (
+    !primary?.ownerEmail ||
+    !showcaseDriver?.[0] ||
+    !showcaseDriver?.[1] ||
+    !showcaseVehicle?.[0] ||
+    !rival?.ownerEmail ||
+    !rival.name
+  ) {
     throw new Error(
-      'The local operator research needs a showcase operator with a driver, and a second active intercity operator.',
+      'The local operator research needs a showcase operator with a driver and a vehicle, and a second active intercity operator.',
     );
   }
 
@@ -246,13 +255,13 @@ async function main() {
     .from('vehicles')
     .select('id, label')
     .eq('operator_id', operator.id)
-    .eq('label', 'Toyota Sienna — grey')
+    .eq('label', showcaseVehicle[0])
     .single();
 
   const { data: driverMember } = await admin
     .from('profiles')
     .select('id, full_name')
-    .eq('full_name', 'Test Driver')
+    .eq('full_name', showcaseDriver[1])
     .single();
 
   const { data: assignment, error: assignError } = await owner.client

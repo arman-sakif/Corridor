@@ -15,15 +15,25 @@ function missing(path, what) {
   process.exit(1);
 }
 
-export function demoPassword() {
-  const path = join(root, '_local', 'demo-accounts', 'password.txt');
-  if (!existsSync(path)) missing(path, 'The demo sign-in password');
-  const password = readFileSync(path, 'utf8').trim();
-  if (!password) {
+function readLocal(path, what) {
+  if (!existsSync(path)) missing(path, what);
+  const value = readFileSync(path, 'utf8').trim();
+  if (!value) {
     console.error(`${path} is empty.`);
     process.exit(1);
   }
-  return password;
+  return value;
+}
+
+export function demoPassword() {
+  return readLocal(join(root, '_local', 'demo-accounts', 'password.txt'), 'The demo sign-in password');
+}
+
+export function adminEmail() {
+  return readLocal(
+    join(root, '_local', 'demo-accounts', 'admin-email.txt'),
+    'The platform admin address',
+  );
 }
 
 export async function loadOperatorResearch() {

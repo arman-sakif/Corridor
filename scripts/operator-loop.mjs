@@ -38,6 +38,8 @@
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 
+import { adminEmail } from './local-seed.mjs';
+
 const env = Object.fromEntries(
   readFileSync('.env.local', 'utf8')
     .split(/\r?\n/)
@@ -57,7 +59,7 @@ const admin = createClient(SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const ADMIN_EMAIL = 'admin@example.com';
+const ADMIN_EMAIL = adminEmail();
 const TEST_PASSWORD = 'operator-loop-password-123';
 
 /** $52.50 end to end — a price no seed data uses, so finding it proves it came from here. */
