@@ -20,6 +20,8 @@
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 
+import { demoPassword, loadOperatorResearch } from './local-seed.mjs';
+
 const env = Object.fromEntries(
   readFileSync('.env.local', 'utf8')
     .split(/\r?\n/)
@@ -40,7 +42,7 @@ const admin = createClient(SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const DEMO_PASSWORD = 'local-demo-password';
+const DEMO_PASSWORD = demoPassword();
 const TEST_PASSWORD = 'e2e-loop-password-123';
 
 let failures = 0;
@@ -94,11 +96,25 @@ const cleanup = { userIds: [], departureId: null, departureVehicleId: null, extr
 async function main() {
   console.log(`Walking the booking loop against ${SITE}\n`);
 
+  const { OPERATORS } = await loadOperatorResearch();
+  const primary = OPERATORS.find((operator) => operator.showcase);
+  const rival = OPERATORS.find(
+    (operator) =>
+      operator.type === 'intercity' &&
+      operator.status === 'active' &&
+      operator.slug !== primary?.slug,
+  );
+  if (!primary?.ownerEmail || !primary.drivers?.[0]?.[0] || !rival?.ownerEmail || !rival.name) {
+    throw new Error(
+      'The local operator research needs a showcase operator with a driver, and a second active intercity operator.',
+    );
+  }
+
   /* ---- find a clean departure to work on ----------------------------- */
   const { data: operator } = await admin
     .from('operators')
     .select('id, name, airport_fee_cents')
-    .eq('name', "Harbour Line")
+    .eq('name', primary.name)
     .single();
 
   const { data: candidates } = await admin
@@ -152,8 +168,8 @@ async function main() {
     .eq('id', created.user.id);
 
   const passenger = await signIn(passengerEmail, TEST_PASSWORD);
-  const owner = await signIn('harbour@example.com', DEMO_PASSWORD);
-  const driver = await signIn('driver.one@example.com', DEMO_PASSWORD);
+  const owner = await signIn(primary.ownerEmail, DEMO_PASSWORD);
+  const driver = await signIn(primary.drivers[0][0], DEMO_PASSWORD);
 
   /* ---- 1. the passenger requests a seat ------------------------------- */
   const { data: bookingId, error: requestError } = await passenger.client.rpc('request_booking', {
@@ -175,7 +191,7 @@ async function main() {
 
   check(held.status === 'held', 'it lands as a hold', held.status);
   check(Boolean(held.hold_expires_at), 'with a clock on it', held.hold_expires_at);
-  // Harbour: $45 a seat, 1 bag free per seat, $10 a bag beyond that.
+  // Seeded through-fare: $45 a seat, 1 bag free per seat, $10 a bag beyond that.
   check(
     held.base_cents === 9000 && held.luggage_cents === 1000 && held.total_cents === 10000,
     'the fare is computed server-side',
@@ -204,7 +220,7 @@ async function main() {
     `completed ${history?.[0]?.completed}, flags ${history?.[0]?.red_flags}`,
   );
 
-  const stranger = await signIn('applicant@example.com', DEMO_PASSWORD);
+  const stranger = await signIn(rival.ownerEmail, DEMO_PASSWORD);
   const { data: leaked } = await stranger.client.from('bookings').select('id').eq('id', bookingId);
   check(leaked?.length === 0, 'a rival operator sees nothing of it');
 
@@ -454,7 +470,7 @@ async function main() {
   // Red flags are deliberately platform-wide: the point of recording a
   // no-show is that the NEXT operator sees it. But only for a passenger who
   // has actually approached them — not as a public register.
-  const jons = await signIn('applicant@example.com', DEMO_PASSWORD);
+  const jons = await signIn(rival.ownerEmail, DEMO_PASSWORD);
 
   const { data: beforeApproaching } = await jons.client.rpc('passenger_history', {
     p_passenger_id: extras.unpaid.userId,
@@ -468,7 +484,7 @@ async function main() {
   const { data: jonsOperator } = await admin
     .from('operators')
     .select('id')
-    .eq('name', "Applicant Rides")
+    .eq('name', rival.name)
     .single();
   const { data: jonsDeparture } = await admin
     .from('departures')

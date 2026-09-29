@@ -1,104 +1,96 @@
 # Corridor
 
-A multi-tenant booking platform for intercity rideshare operators in Ontario,
-sold to those operators as a subscription.
+A booking platform for the intercity rideshare operators that run fixed daily
+timetables between Ontario cities. One passenger site: search a city pair and
+a date, see every operator's departures side by side, and request a seat.
 
-Corridor is not a rideshare business. It owns no vehicles, employs no drivers,
-sets no prices, and carries no passengers. It is software sold to small
-companies that already do all of that — businesses running fixed daily
-timetables between Windsor and Toronto that today take every booking by phone,
-text, and WhatsApp.
+A passenger chooses a **company** and a **departure time**. Who drives, and
+which vehicle turns up, is the operator's decision and is never shown. Closer
+to booking a bus than hailing a car.
 
-The product is an **aggregator**. One passenger-facing site: search
-`Toronto → Windsor, Sept 3`, see every operator's departures that day side by
-side, request a seat on one.
+**Live demo:** [corridor-cyan.vercel.app](https://corridor-cyan.vercel.app)
 
-**Live:** [corridor-cyan.vercel.app](https://corridor-cyan.vercel.app)
+Operators set their own fares and run their own vehicles. Corridor is the
+shared booking desk: the operator approves each request, and the passenger
+pays the driver on the day, in cash or by e-transfer. Nothing is charged in
+the app.
 
 Design and rationale: [`docs/architecture.md`](docs/architecture.md).
-The operator research the seed data is built from:
-[`the operator notes`](the operator notes).
 
 ---
 
-## Status
+## How a trip works
 
-Every phase is built and deployed. An operator can be onboarded, publish a
-timetable, take real bookings, run the day, and settle payment; passengers can
-add a local ride at the far end and report a trip that went wrong. Phases 0–5
-are the MVP; 6 and 7 followed.
+1. **Search.** Two cities and a date. Every operator running that day is listed together.
+2. **Request a seat.** Pick a departure and a pickup point. The request holds the seat for up to an hour while the operator confirms it.
+3. **Pay the driver.** Cash or e-transfer after the trip, at the price quoted when the seat was requested.
 
-| Phase | Scope | State |
-|---|---|---|
-| 0 | Schema, RLS, auth, profiles, role routing | **built** |
-| 1 | Admin: vet operators, manage cities | **built** |
-| 2 | Operator setup: stops, routes, fares, timetable, fleet, team | **built** |
-| 3 | Departure generation and passenger search | **built** |
-| 4 | Booking: the hold, capacity, approve/decline, cancellation | **built** |
-| 5 | Departure day: assignment, manifest, completion, settlement | **built** |
-| 6 | In-city add-on: zones, the checkout add-on, separate approval | **built** |
-| 7 | Subscription tracking | **built** · mobile apps not started |
+Someone running a rideshare business applies from the site, is vetted by a
+platform admin, and then publishes stops, fares, and a timetable. Passengers
+only see operators that have been approved.
 
-Beyond the seven phases, seven things were added because the product needed
-them rather than because a roadmap asked:
+---
 
-| | |
+## What it includes
+
+| Area | What it covers |
 |---|---|
-| **Account types** | One person, one login, a choice of hat: passenger, driver, operator or admin. Someone with more than one is asked *Log in as* at sign-in and can switch from the header without signing out. Each type has its own landing page, sections and colour — passenger blue, operator violet, driver amber, admin slate. An owner can switch driving on for themselves; anyone above passenger can switch passenger on or off in Profile. The choice is a view, never a permission: RLS still decides what a person may do. |
-| **Ride lists** | My rides and the operator's Requests show today onward, waiting-first. Past trips move to a paged History page on each side. Both filter by status and date and sort, all in the URL. The operator side draws each departure as seats, with a mark where passengers on different legs share one. |
-| **Notifications** | An in-app list with an unread badge, plus email. The in-app half is the one that works — see the sender note below. |
-| **Complaints** | A passenger reports a *trip*; the operator and a platform admin are both told, and either can close it with a note the passenger sees. The other direction stays a red flag, which the assigned driver can now raise too. |
-| **Feedback** | Anyone signed in can send an idea or an annoyance from *Tell us*; admins read them at `/admin/feedback`. |
-| **Insights** | An operator sees how full their departures actually ran, broken down by day of the week, over 30 days, 90 days or a year. Fullness is measured on each departure's **busiest leg**, because that is what capacity means here — a van that carried Windsor→London and then London→Yorkdale sold two seats and was never more than a quarter full. It names the fullest and emptiest weekday and stops there; what to do about a quiet Tuesday is the operator's call. |
-| **Promotions** | An operator generates a six-character voucher code worth a set amount or a percentage off, lasting 3 days, 7 days, 1 month or 4 months, with a ceiling on how many bookings can use it. A passenger types it when they request a seat. Codes are drawn from the digits and the letters without I, L, O and U, so a code read down a phone line cannot be misheard — and one typed with the letters anyway is folded onto the digits rather than refused. The code is scoped to the business that issued it, spendable once per passenger, and a lapsed hold gives its use straight back. |
+| **Operator setup** | Stops, routes in each direction, a timetable, a fleet, and a team. Two fare modes: a price on every city pair, or a price per leg that adds up. |
+| **The booking** | A one-hour hold, per-leg capacity, approve or decline, and free cancellation by either side. |
+| **Departure day** | Assign vehicles, download the driver manifest, mark the trip complete, and settle payment once both sides agree. Ratings run in both directions. |
+| **Account types** | One login can be a passenger, a driver, an operator, and an admin. Signing in asks which account to use, and the header can switch without a second sign-in. The choice changes the landing page and the colour. Permission stays with the database. |
+| **The local ride** | An in-city drop-off added to a confirmed intercity seat, priced by zone, and approved by a separate operator. |
+| **Promotions** | A six-character voucher, a fixed amount or a percentage off, once per passenger, scoped to the operator that issued it. |
+| **The rest of the desk** | In-app notifications, trip complaints, product feedback, weekday occupancy for the operator, and subscription tracking for the platform admin. |
 
-Not yet wired: Google OAuth, which needs credentials — so its buttons are
-greyed out and lead to a short page saying so. Everything else in the code path
-is complete.
+Google sign-in is written and switched off at the button until an OAuth client
+exists. See [Google sign-in](#google-sign-in). Native mobile apps are not
+started; the business logic lives in Postgres so a later app can call it.
 
-**Email is on Resend's sandbox sender**, which delivers only to the address the
-Resend account was opened with. That is a deliberate prototype constraint —
-sending to anyone else needs a verified domain, and a domain costs money. So
-account recovery reaches the developer's inbox and nobody else's.
-
-It is not a silent failure. `notify()` logs the whole message — subject, body,
-and any link — whenever a send is refused or no key is set, so a sign-in code
-is always readable from the server console whatever the recipient. Watch
-`npm run dev` while using `/forgot-password` and the code is right there.
-
-To send to real passengers: verify a domain at
-[resend.com/domains](https://resend.com/domains), then point
-`NOTIFY_FROM_EMAIL` at it. Nothing in the code changes.
-
-Signing in is email and password. Google is written but switched off at the
-button until it has credentials — see *Google sign-in*. Phone number as a
-*login* is not built: Supabase phone auth needs a paid SMS provider, and there
-is none yet. Phone is still collected at signup, as the number an operator
-dials.
+Email goes out through [Resend](https://resend.com). On Resend's sandbox
+sender a message reaches only the address that opened the Resend account.
+`notify()` prints the subject, the body, and any link when a send is refused
+or no API key is set, so a sign-in code is readable from the server log.
+Verify a domain at [resend.com/domains](https://resend.com/domains) and point
+`NOTIFY_FROM_EMAIL` at it to deliver to passengers.
 
 ---
 
-## Running it
+## Stack
 
-Node 22+ and a Supabase project.
+[Next.js 16](https://nextjs.org) App Router · TypeScript 7 · Tailwind 4 ·
+[Supabase](https://supabase.com) (Postgres, Auth, row-level security) ·
+[Zod 4](https://zod.dev) · [Vercel](https://vercel.com) · Resend · oxlint
+
+Server Actions and Route Handlers are the backend. Anything that has to be
+atomic — taking a seat, applying a voucher, settling a fare — is a Postgres
+function. There is no ORM. `proxy.ts` is Next 16's middleware and refreshes
+the session on every request.
+
+---
+
+## Run it
+
+Node 22 or newer, and a Supabase project.
 
 ```bash
 npm install
-cp .env.example .env.local     # then fill it in
+cp .env.example .env.local   # then fill it in
 npm run dev
 ```
 
+Every variable is explained in [`.env.example`](.env.example). Three of them
+are deliberately left empty, and an empty value is the right value until you
+have a reason:
+
+- `NEXT_PUBLIC_SITE_URL` — the app uses the Vercel URL in production and `http://localhost:3000` locally. Setting this to localhost and deploying it makes password-reset links point at the recipient's own machine.
+- `ENFORCE_UNIQUE_CONTACT` — one phone number per account, once you no longer need several demo accounts on one number.
+- `CRON_SECRET` — required for the [daily job](#the-daily-job). An empty string counts as unset, and the route then answers 404.
+
 ### Supabase
 
-1. Create a project at [supabase.com](https://supabase.com). The free tier is
-   enough.
-2. Copy the project URL and both keys from **Project settings → API keys**:
-   - the **publishable** key (`sb_publishable_…`) is the browser one — RLS is
-     what protects the data behind it;
-   - the **secret** key (`sb_secret_…`) is server-only and must never reach the
-     client bundle.
-
-   The URL is `https://<ref>.supabase.co`, not the dashboard link.
+1. Create a project at [supabase.com](https://supabase.com). The free tier is enough.
+2. From **Project settings → API keys**, copy the project URL (`https://<ref>.supabase.co`, the API URL), the **publishable** key (`sb_publishable_…`, safe in the browser because row-level security is what protects the rows), and the **secret** key (`sb_secret_…`, server-only).
 3. Apply the schema:
 
    ```bash
@@ -106,191 +98,114 @@ npm run dev
    npx supabase db push
    ```
 
-4. **Authentication → URL Configuration**: set the Site URL to your deployed
-   origin and add all four of these to the redirect list:
+4. **Authentication → URL Configuration.** Set the Site URL to your deployed origin and allow these redirects:
 
    ```
    https://<your-app>/auth/callback     http://localhost:3000/auth/callback
    https://<your-app>/auth/confirm      http://localhost:3000/auth/confirm
    ```
 
-   `/auth/callback` takes the PKCE code from Google and from Supabase's own
-   confirmation emails. `/auth/confirm` takes the token hash from the reset
-   links we mint ourselves and send through Resend. Email and password auth is
-   on by default.
+   `/auth/callback` receives the PKCE code from Google and from Supabase's own mail. `/auth/confirm` receives the token hash from the reset links this app mints and sends through Resend.
 
-5. **Authentication → Sessions**: leave both the inactivity timeout and the
-   time-box unset. Signed in stays signed in — the proxy rotates the refresh
-   token on every request, and the cookie is written with an explicit 400-day
-   max-age (`SESSION_COOKIE_OPTIONS` in `lib/supabase/env.ts`), so the only
-   thing that signs someone out is pressing Sign out.
+5. **Authentication → Sessions.** Leave the inactivity timeout and the time-box unset. A session lasts until Sign out: the proxy rotates the refresh token on each request, and the cookie is written with a 400-day max-age (`SESSION_COOKIE_OPTIONS` in `lib/supabase/env.ts`).
 
-6. **Authentication → Providers → Email**: turn **Confirm email off**.
+6. **Authentication → Providers → Email.** Turn **Confirm email** off.
 
-   With it on, a new account has to click a link before it can do anything, and
-   that email goes through Supabase's shared SMTP — a couple of messages an hour,
-   then `email rate limit exceeded`. It is the single largest piece of friction
-   between a passenger and their first booking.
+   With it on, a new account has to click a link before it can do anything, and that mail goes through Supabase's shared SMTP, which allows a couple of messages an hour and then returns `email rate limit exceeded`. An unconfirmed address is an acceptable trade here: nothing is prepaid, and an operator approves every booking by hand. If fake signups become a problem, turn confirmation on with Resend as custom SMTP. `node scripts/auth-loop.mjs` checks that confirmation is off.
 
-   The trade is that an address is not proven at signup. That is the right trade
-   here: nothing is prepaid, an operator approves every booking by hand, and
-   someone who cannot read the inbox cannot recover the account. Revisit it if
-   fake signups ever become a real problem — with Resend configured as custom
-   SMTP, not on Supabase's shared sender.
-
-   `node scripts/auth-loop.mjs` asserts this is off.
+This project was created with **"automatically expose new tables"** off, so the migrations grant API access explicitly and row-level security then decides the rows. A project created with that setting on still runs; it also has Supabase's default grants underneath. `supabase/tests/grants.test.ts` describes the intended grants either way.
 
 ### Google sign-in
 
-The code path is complete. What it needs is an OAuth client, and the one detail
-that trips people up is that **Google redirects to Supabase, not to this app** —
-so the redirect URI below is a `supabase.co` address, not a `vercel.app` one.
+The code path is complete. It needs an OAuth client. Google redirects to
+**Supabase**, so the redirect URI is a `supabase.co` address.
 
-1. **Google Cloud** → [console.cloud.google.com](https://console.cloud.google.com)
-   → create or pick a project.
+1. In [Google Cloud](https://console.cloud.google.com), create or pick a project.
+2. On the OAuth consent screen (newer consoles: *Google Auth Platform → Branding*), set the user type to **External**, name the app `Corridor`, and add a support email. Authorised domains: `supabase.co`, plus `vercel.app` or your own domain. Leave the default scopes (`email`, `profile`, `openid`). **Publish the app.** While it says *Testing*, only listed test users can sign in, and everyone else sees `access_blocked`.
+3. **Credentials → Create credentials → OAuth client ID.** Application type **Web application**. Authorised redirect URI, with no trailing slash:
 
-2. **OAuth consent screen** (newer consoles: *Google Auth Platform → Branding*):
-   - User type **External**, app name `Corridor`, and a support + developer
-     contact email.
-   - Authorised domains: `supabase.co`, plus `vercel.app` or your custom domain.
-   - Scopes: leave the defaults. `email`, `profile` and `openid` are all this
-     needs, and they are the reason no Google verification review is required.
-   - **Publish the app.** While it says *Testing*, only addresses you list as
-     test users can sign in — everyone else gets `access_blocked`. This is the
-     step people miss, and it looks like a broken button rather than a setting.
+   ```
+   https://<ref>.supabase.co/auth/v1/callback
+   ```
 
-3. **Credentials → Create credentials → OAuth client ID**
-   - Application type: **Web application**.
-   - Authorised redirect URI — exactly this, no trailing slash:
+   Supabase shows the same string on the Google provider page. Copy the client ID and secret.
 
-     ```
-     https://<ref>.supabase.co/auth/v1/callback
-     ```
+4. **Supabase → Authentication → Providers → Google.** Enable it, paste both values, and save.
+5. Turn the buttons on: delete `components/google-button.tsx` and the `/google-unavailable` page, and have `sign-in-form.tsx` and `sign-up-form.tsx` post their `next` value to `signInWithGoogle` again. The shape each form replaced is in the file's header comment.
+6. `node scripts/auth-loop.mjs` reports whether the provider is live. Then use *Continue with Google* on `/sign-in`.
 
-     Supabase shows you the same string on the Google provider page. For this
-     project it is `https://applmxxchzbdrtwihqqn.supabase.co/auth/v1/callback`.
-   - Copy the **Client ID** and **Client secret**.
-
-4. **Supabase → Authentication → Providers → Google**: enable it, paste both
-   values, save.
-
-5. Switch the buttons back on: delete `components/google-button.tsx` and the
-   `/google-unavailable` page, and have `sign-in-form.tsx` and `sign-up-form.tsx`
-   post their `next` to `signInWithGoogle` again — the shape each one replaced
-   is in the file's header comment.
-
-6. Check it: `node scripts/auth-loop.mjs` reports whether the provider is live,
-   then press *Continue with Google* on `/sign-in`.
-
-Until step 5, *Continue with Google* is greyed out, says *Not available in
-current version* on hover, and leads to a page that points at email and
-password instead — which work regardless. Nothing else is stubbed:
-`signInWithGoogle` and `/auth/callback` are written and route by role on
-return, so only the two forms and that one page have to change.
+Until step 5, *Continue with Google* stays greyed out and leads to a page that
+points at email and password. `signInWithGoogle` and `/auth/callback` are
+already written.
 
 ### Becoming a platform admin
 
 `platform_role` is not writable through any policy, and a trigger blocks the
-change unless it comes from a platform admin or the service role. A direct
-database session is exempt — anyone holding one could disable the trigger
-anyway — so the first admin is granted from the SQL editor:
+change unless it comes from an existing admin or the service role. The first
+admin is granted from the SQL editor, which is exempt:
 
 ```sql
 update public.profiles set platform_role = 'admin'
 where id = (select id from auth.users where email = 'you@example.com');
 ```
 
-Then `/admin` lets you add cities and vet operators. Signing in afterwards asks
-*Log in as* — admin, or passenger unless it is switched off in Profile.
+`/admin` then lets you add cities and vet operators. The next sign-in asks
+which account to use.
 
 ### Demo data
 
 ```bash
-node scripts/seed.mjs           # build it
+node scripts/seed.mjs           # wipe and rebuild
 node scripts/seed.mjs --remove  # take it back out
 ```
 
-Builds the corridor described in `the operator notes`: 16 cities, 7
-operators, 33 stops, 12 routes, ~1000 departures, and ~230 bookings across
-every status. Every account signs in with `local-demo-password`;
-`harbour@example.com` owns the largest operator.
+The seed fills the database `.env.local` points at: cities along the 401,
+several operators, routes in both directions, a rolling timetable, and
+bookings in every status. Dates are relative to today, so a reseed stays
+current.
 
-The seed deliberately reproduces the awkward cases. Harbour sells
-Windsor→Toronto for $45 while its legs total $105 (matrix), Second Line sells
-the same pair for $93 (additive), one departure is full on its middle leg while
-both ends stay open, and Pearson is a second Toronto stop so the same search
-offers two drop-offs at different prices — one carrying the airport fee.
+The operator list and the demo sign-in password are read from `_local` and
+are not in this repository. Without those files the script stops and names
+the one that is missing.
 
-### Grants
-
-This project was created with **"automatically expose new tables" off**, so
-Supabase grants the API roles nothing by default and the migrations grant
-everything explicitly. Two gates rather than one: `GRANT` decides whether a
-role may touch a table at all, RLS decides which rows once it may. If you
-create a project with that setting on, the app still works — you just have
-Supabase's defaults underneath. `supabase/tests/grants.test.ts` describes the
-intended state either way.
-
-### Resisting a guesser
-
-Three things stand in front of somebody trying passwords or voucher codes, and
-**two of them are in this repo while two are console settings that are not**.
-The two that are not are the more valuable pair; do them.
-
-**In the repo.** Failed sign-ins are counted per account and per caller
-(`lib/auth/throttle.ts`, 10 per address and 40 per IP in a quarter of an hour),
-and failed voucher codes are counted per account inside `resolve_voucher()`
-(10 an hour). Neither delegates to Supabase's own limit, because sign-in runs
-in a Server Action: GoTrue sees the Vercel function's address, not the
-caller's, so every sign-in on the site shares one bucket and anyone can spend
-it on everybody else's behalf. Subjects are stored as SHA-256 hashes — in the
-clear these tables would be a roster of which addresses have been tried and a
-log of who was where.
-
-**Still to do — 1. Turn on CAPTCHA.** This is the single highest-value change
-left, because it is the only one that also stops accounts being minted in bulk
-(signup is open and email confirmation is off, deliberately — see the note
-above).
-
-1. Create a site at [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile)
-   (free, no card) and copy the **site key** and **secret key**.
-2. **Supabase → Authentication → Attack Protection → Enable CAPTCHA
-   protection**: choose *Turnstile*, paste the secret key, save.
-3. Add the site key as `NEXT_PUBLIC_TURNSTILE_SITE_KEY` in Vercel *and*
-   `.env.local`.
-4. Render the widget on `/sign-in`, `/sign-up` and `/forgot-password`, and pass
-   the token it yields:
-   ```ts
-   await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } });
-   ```
-   Every entry point needs it. Supabase rejects an un-tokened call once the
-   setting is on, so `scripts/auth-loop.mjs` and `scripts/seed.mjs` will start
-   failing — both sign in directly. Keep a second project, or add a bypass for
-   the service role, before turning it on.
-
-**Still to do — 2. Leaked-password protection.** **Supabase → Authentication →
-Attack Protection → Prevent use of leaked passwords.** It checks new passwords
-against HaveIBeenPwned's k-anonymity API, so nothing leaves as plaintext. No
-code change; it applies at signup and password change, not to existing
-passwords. It is a **Pro plan** feature — if the project stays on Free, the
-nearest free substitute is to widen the common-password list in
-`lib/auth/password-strength.ts` and make it a gate rather than a meter, which
-is a much weaker thing and worth being honest about.
-
-While in that screen, both of these are worth a look too: the sign-in and
-sign-up **rate limits** can be lowered from their defaults, and **Auth →
-Sessions** confirms the 400-day cookie this project sets deliberately.
+The data is built to show the awkward cases. One operator sells a through
+trip for less than the sum of its legs (matrix pricing). Another sells the
+same cities as the sum (additive). One departure is full on its middle leg
+while both ends stay open. One city has two stops, so one search offers two
+drop-offs at different prices, and one of them carries the airport fee.
 
 ### The daily job
 
-`/api/cron` rolls the 30-day departure window forward and relabels lapsed
-holds. `vercel.json` schedules it; set `CRON_SECRET` or the route stays shut —
-**an empty value counts as unset**, which is how the job sat dead for three
-weeks while every invocation quietly took a 404. The route now logs why when
-the secret is missing.
+`/api/cron` extends the 30-day departure window and relabels lapsed holds.
+`vercel.json` schedules it for 08:00 UTC. Set `CRON_SECRET` to a non-empty
+value or the route stays shut and logs the reason.
 
-Neither job is load-bearing. Capacity excludes expired holds inline, so seats
-free themselves whether or not the sweep has run.
+The job is housekeeping. Capacity already ignores an expired hold, so a seat
+frees itself whether or not the sweep has run.
+
+### Attack protection
+
+Failed sign-ins are counted in this repo, per account and per caller
+(`lib/auth/throttle.ts`: 10 per address and 40 per IP in 15 minutes). Failed
+voucher codes are counted per account inside `resolve_voucher()` (10 an hour).
+Both live here because sign-in runs in a Server Action: GoTrue would see the
+server's address, and every visitor would share one bucket. The stored
+subjects are SHA-256 hashes.
+
+For a deployment on the public internet, two Supabase settings sit on top of that:
+
+1. **Cloudflare Turnstile.** Create a widget at [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile), enable **Authentication → Attack Protection → CAPTCHA** with the secret key, and set `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. Render the widget on `/sign-in`, `/sign-up`, and `/forgot-password`, and pass the token through:
+
+   ```ts
+   await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } });
+   ```
+
+   Once the setting is on, Supabase rejects a call that has no token, so `scripts/auth-loop.mjs` and `scripts/seed.mjs` need a second project or a bypass before you enable it. They sign in directly.
+
+2. **Leaked-password protection.** **Authentication → Attack Protection → Prevent use of leaked passwords.** It checks new passwords against Have I Been Pwned and applies at signup and password change. This is a Pro-plan feature. On the free plan, the common-password list in `lib/auth/password-strength.ts` is a meter, which is a weaker check.
+
+The same screen is where the Auth rate limits and the session time-box live.
+This project leaves the time-box unset on purpose. See the session step above.
 
 ---
 
@@ -300,47 +215,44 @@ free themselves whether or not the sweep has run.
 |---|---|
 | `npm run dev` | Development server. |
 | `npm run build` | Production build, including a full typecheck. |
-| `npm test` | Everything — unit tests and the database tests. 323 tests, about two minutes. |
-| `npm run test:unit` | The pure modules: fares, capacity, money, time, account types, ride lists, seat map, paging, vouchers, insights. Fast. |
-| `npm run test:db` | The real migrations against real Postgres. |
+| `npm test` | Unit tests and database tests. 323 tests. |
+| `npm run test:unit` | Fares, capacity, money, time, account types, ride lists, the seat map, paging, vouchers, insights. |
+| `npm run test:db` | The migration files against Postgres. |
 | `npm run typecheck` | `tsc --noEmit`. |
-| `npm run lint` | oxlint. See [`docs/linting.md`](docs/linting.md) for why it is not ESLint. |
+| `npm run lint` | oxlint. Why it is not ESLint, and every disabled rule: [`docs/linting.md`](docs/linting.md). |
 | `npm run lint:fix` | The same, applying what it can fix. |
-| `npm run db:types` | Regenerate `lib/supabase/database.types.ts` from a *local* Supabase stack (Docker). This project does not run one, so in practice the file is hand-maintained: update it in the same commit as any migration that changes a table. |
-| `node scripts/seed.mjs` | Rebuild the demo data. `--remove` takes it back out. |
-| `node scripts/e2e-loop.mjs` | The whole booking loop against a running app, request through settlement. |
-| `node scripts/operator-loop.mjs` | A brand-new operator from application to a seat on sale, against a running app. |
-| `node scripts/incity-loop.mjs` | The in-city local ride: who may book one, who may confirm it, and what cancels it. |
-| `node scripts/auth-loop.mjs` | Signup and both recovery paths against the live database. |
-| `node scripts/race-test.mjs` | Race the seat lock against the live database. |
+| `npm run db:types` | Regenerate `lib/supabase/database.types.ts` from a local Supabase stack. This project does not run one, so the file is updated by hand in the same commit as the migration that changes a table. |
+| `node scripts/seed.mjs` | Rebuild the demo data from the local operator research. `--remove` takes it out. |
+| `node scripts/e2e-loop.mjs` | Request through settlement, against a running app. |
+| `node scripts/operator-loop.mjs` | A new operator from application to a seat on sale, against a running app. |
+| `node scripts/incity-loop.mjs` | The local ride: who may book one, who may confirm it, and what cancels it. |
+| `node scripts/auth-loop.mjs` | Signup and both recovery paths, against the live database. |
+| `node scripts/race-test.mjs` | Several passengers requesting the same departure at once, against the live database. |
 
-### The database tests
+### Database tests
 
-`npm run test:db` applies the real migration files to
-[PGlite](https://pglite.dev) — Postgres compiled to WebAssembly — with a
-minimal stand-in for Supabase's `auth` schema. No Docker, no running server.
+`npm run test:db` applies the migration files to [PGlite](https://pglite.dev),
+Postgres compiled to WebAssembly, with a small stand-in for Supabase's `auth`
+schema. No Docker.
 
-`request_booking()` under test is therefore the function that runs in
-production. Each call runs in its own transaction with `set local role` and JWT
-claims set the way PostgREST sets them, so RLS behaves as it will live. The
-harness issues no blanket grant — it uses exactly what the grants migrations
-hand out, so the tests exercise production's real privilege set.
-
-Writing them found three real bugs, including a privilege escalation that let
-any signed-in user make themselves a platform admin. Run them.
+`request_booking()` under test is the function that runs in production. Each
+call uses its own transaction, with `set local role` and the JWT claims
+PostgREST would set, so row-level security behaves as it does live. The
+harness grants only what the migrations grant. The suite is what caught a
+privilege escalation that let any signed-in user grant themselves platform
+admin.
 
 ### The race test
 
-`scripts/race-test.mjs` fires simultaneous requests at the live database, each
-on its own connection, which is the only way the row lock in
-`request_booking()` comes under the pressure it exists for.
+`scripts/race-test.mjs` fires concurrent requests at a live database, each on
+its own connection, which is the pressure the row lock in `request_booking()`
+exists for. PGlite has a single connection, so it cannot do this.
 
-It checks that contention is refused **and that non-contention is not**: four
-passengers on disjoint legs must all succeed on a one-seat departure. A lock
-held too coarsely would pass the oversell check while silently collapsing
-per-leg capacity into per-departure capacity — a van that legitimately carries
-30 bookings across five stops would carry 14, and the only symptom would be
-revenue that never arrives.
+The test checks both directions. Contended seats are refused. Passengers on
+legs that do not overlap all succeed, including on a one-seat departure. A
+lock held across the whole departure would pass the oversell check and still
+be wrong: a van that can carry a full load on each leg would be limited to
+one load for the whole route.
 
 ---
 
@@ -349,126 +261,94 @@ revenue that never arrives.
 ```
 app/
   (public)/      search, departure detail, operator profiles, for operators,
-                 sign in and up, "Log in as" picker, recovery
+                 sign in and up, the account picker, recovery
   (passenger)/   my rides and history, booking detail, the local ride,
-                 notifications, profile and account types, reports, feedback
+                 notifications, profile, reports, feedback
   (operator)/    setup, requests and history, departures, fleet, team, zones,
                  in-city requests, insights, promotions, complaints, billing
-  (driver)/      trips, manifest, flagging and rating a passenger
+  (driver)/      trips, the manifest, flagging and rating a passenger
   (admin)/       operator vetting, cities, subscriptions, complaints, feedback
-  api/           manifest CSV, the daily job
+  api/           the manifest CSV, the daily job
   auth/          callback (PKCE) and confirm (token hash)
-  error.tsx      "we could not load this page" — a refused query lands here
-components/      UI primitives, icons, header and account switcher, seat map,
-                 list controls, shared complaint list
+components/      UI primitives, icons, the header and account switcher,
+                 the seat map, list controls
 lib/
-  auth/          session, account types (modes.ts pure, mode-session.ts the
-                 cookie), sign-in, recovery, password strength
-  booking/       fares, capacity, seat map, ride lists, search, booking and
-                 departure-day actions
-  incity/        the local-ride add-on — isolated, imported by nothing else
-  notifications/ reading the in-app list
-  operator/      setup actions, insights shaping, dashboard queries, paging
-                 through GoTrue's user list
-  promotions/    voucher codes — creation, redemption checks, display math
+  auth/          session, account types, sign-in, recovery, password strength
+  booking/       fares, capacity, the seat map, ride lists, search,
+                 booking and departure-day actions
+  incity/        the local ride, imported by nothing on the intercity path
+  notifications/ the in-app list
+  operator/      setup, insights, dashboard queries, paging through GoTrue
+  promotions/    voucher codes
   reports/       complaints and feedback
-  supabase/      clients, types, and rows()/one()/count() for every read
-  validation/    zod schemas
-  notify.ts      the one seam every notification goes through
+  supabase/      clients, types, and rows() / one() / count()
+  validation/    Zod schemas
+  notify.ts      the one place a notification is sent
   routes.ts      the only typedRoutes escape hatches
-proxy.ts         Next 16's middleware: refreshes the session on every request
+proxy.ts         refreshes the session on every request
 supabase/
-  migrations/    numbered SQL — schema, RLS, and every Postgres function
-  functions/     README only: which migration defines each function
-  tests/         the migrations, run against real Postgres
-scripts/         seeding, and the loops that run against the real database
+  migrations/    numbered SQL: schema, policies, and every Postgres function
+  functions/     an index of which migration defines each function
+  tests/         the migrations, run against Postgres
+scripts/         the seed, and the loops that run against a real database
 ```
 
-Three rules about these boundaries:
+Three boundaries are load-bearing:
 
-- **`lib/booking/fares.ts` is the only module that reads `pricing_mode`.** No
-  other code decides what a segment costs.
-- **`lib/incity` stays isolated.** Nothing in the intercity path imports from
-  it. In-city is a Phase 6 add-on and must be removable without touching the
-  booking flow.
-- **Every read goes through `rows()`, `one()` or `count()`.** A bare
-  `const { data }` followed by `data ?? []` renders a refused query as a calm
-  empty page; `lib/supabase/read-paths.test.ts` fails if one comes back.
+- **`lib/booking/fares.ts` is the only module that reads `pricing_mode`.** Nothing else decides what a segment costs.
+- **`lib/incity` stays isolated.** The intercity path does not import it, so the local ride can be removed without touching booking. The booking page links to the ride.
+- **Reads go through `rows()`, `one()`, or `count()`.** A bare `const { data }` followed by `data ?? []` renders a refused query as an empty page. `lib/supabase/read-paths.test.ts` fails if one comes back.
 
-Postgres functions live in `supabase/migrations/`, not `supabase/functions/`.
-A function is schema and has to replay in order onto a fresh database;
-`supabase/functions/README.md` indexes which migration defines what.
+Postgres functions live in `supabase/migrations/`, because a function is
+schema and has to replay onto a fresh database.
+[`supabase/functions/README.md`](supabase/functions/README.md) indexes which
+migration defines each one.
 
 ---
 
-## The parts most likely to break
+## Where it breaks
 
-Most of this app is CRUD. Four things are not, and each carries a comment at
-the top of its file explaining why it is written the way it is.
+Most of the app is ordinary CRUD. Four things are not, and each file says so
+at the top.
 
-**Capacity is per leg, not per departure.** A 16-seat departure can carry far
-more than 16 bookings, as long as no single stretch between two stops exceeds
-16. The check and the insert are one locking Postgres function — a read-then-
-write in TypeScript is a race that oversells seats. `lib/booking/capacity.ts`
-exists for display only and says so in its first paragraph.
+**Capacity is per leg.** A 16-seat departure can hold more than 16 bookings,
+as long as no single stretch between two stops exceeds 16. Windsor to London
+and London to Toronto can share one physical seat. The check and the insert
+are one locking function, `request_booking()`. A read-then-write in TypeScript
+oversells seats. `lib/booking/capacity.ts` is for display only.
 
-**Holds expire in an hour, without a cron.** Every capacity query excludes
-expired holds inline, so a seat frees itself the instant its hold lapses.
-Correctness never depends on a background job.
+**Holds expire in an hour, with no cron.** `hold_expires_at` is the earlier of
+one hour out and the departure itself. Every capacity query ignores a hold
+whose time has passed, so the seat frees itself at that instant. A later job
+may relabel the row for display. Correctness does not depend on it.
 
-**Fares are operator-defined, in two modes.** `matrix` is the default and the
-one these businesses actually use: a through fare is priced explicitly and is
-*not* the sum of its legs. Directional fares are independent, because a route
-runs one way and the return trip is a different route.
+**Fares come in two modes, and the operator picks.** `matrix` is the default,
+and the one these businesses use: Windsor to Toronto has its own price, which
+is lower than the legs added together. `additive` sums the legs a segment
+spans. The return trip is a separate route with its own prices. The fare is
+recomputed on the server when the seat is requested and stored on the booking.
+A price sent by the browser is ignored. A voucher is the one adjustment after
+that, and a wrong or spent code refuses the booking.
 
-**Money is integer cents and time is Ontario time.** No floats anywhere. A
-departure is a `service_date` plus a `departure_time` in America/Toronto, and
-the instant is derived — a 5:00 AM departure is 5:00 AM local on both sides of
-the DST change.
-
----
-
-## Not in the MVP
-
-Maps or geocoding of any kind, GPS tracking, in-app payments, door-to-door
-pickup, private vehicle bookings, SMS, a matching algorithm, driver-posted
-rides, and multi-operator connecting trips.
-
-Payment happens off-platform, after the trip, between the passenger and the
-driver. No money moves through Corridor.
-
-Ontario licensing and commercial passenger insurance are the operators'
-responsibility, not the platform's.
+**Money is integer cents, and time is Ontario time.** `4500` is $45.00. A
+departure is a service date plus a clock time in `America/Toronto`, and the
+instant is derived with `toronto_instant()`. A 5:00 AM departure is 5:00 AM
+local on both sides of the daylight-saving change.
 
 ---
 
-## Handing over
+## Outside the product
 
-What someone taking this on needs besides the repository:
+Maps and geocoding, GPS tracking, in-app payments, door-to-door pickup,
+private vehicle bookings, SMS, a matching algorithm, driver-posted rides, and
+trips that connect across operators.
 
-| Service | What it holds | State |
-|---|---|---|
-| **Vercel** | The deployment, env vars, and the daily cron (`vercel.json`, 08:00 UTC) | live |
-| **Supabase** | Postgres, Auth, the schema and all data | live — every migration applied |
-| **Resend** | Email | sandbox sender; reaches the account owner only |
-| **Google Cloud** | The OAuth client for *Continue with Google* | not created — see *Google sign-in* |
-| **GitHub** | This repository | — |
+Ontario licensing and commercial passenger insurance sit with the operators.
 
-Access to each is separate; transferring the repo transfers none of them. The
-environment variables are listed, with the reasoning for each, in
-`.env.example`.
+---
 
-Settings that look like omissions and are not: Supabase *Confirm email* is off,
-`NEXT_PUBLIC_SITE_URL` is unset, `ENFORCE_UNIQUE_CONTACT` is unset. Each is
-explained above or in `.env.example`.
+## Read next
 
-Where to read next:
-
-- [`docs/architecture.md`](docs/architecture.md) — the design, the invariants,
-  and §10, every mistake this codebase has already made once.
-- [`supabase/functions/README.md`](supabase/functions/README.md) — which
-  migration defines each Postgres function.
-- [`docs/linting.md`](docs/linting.md) — why oxlint, and every disabled rule.
-- [`the operator notes`](the operator notes) — the operator
-  research. It names real businesses: swap them for fictional ones before any
-  public demo.
+- [`docs/architecture.md`](docs/architecture.md) — the model, the invariants, and the mistakes this codebase has already made once.
+- [`supabase/functions/README.md`](supabase/functions/README.md) — which migration defines each Postgres function.
+- [`docs/linting.md`](docs/linting.md) — oxlint, and every disabled rule.

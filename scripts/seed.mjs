@@ -1,5 +1,5 @@
 /**
- * Seeds the database from the operator notes.
+ * Seeds the database from the operator research in _local/operator-research.
  *
  *   node scripts/seed.mjs           # wipe the seed data and rebuild it
  *   node scripts/seed.mjs --remove  # take it all back out
@@ -21,17 +21,19 @@
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 
-import {
+import { segmentBaseCents } from '../lib/booking/fares.ts';
+import { voucherDiscountCents } from '../lib/promotions/vouchers.ts';
+import { addDays, todayInToronto } from '../lib/time.ts';
+import { demoPassword, loadOperatorResearch } from './local-seed.mjs';
+
+const {
   CITIES,
   INCITY_OPERATOR,
   OPERATORS,
   PASSENGERS,
   SCHEDULE_DAYS,
   SUBSCRIPTIONS,
-} from './seed-data.mjs';
-import { segmentBaseCents } from '../lib/booking/fares.ts';
-import { voucherDiscountCents } from '../lib/promotions/vouchers.ts';
-import { addDays, todayInToronto } from '../lib/time.ts';
+} = await loadOperatorResearch();
 
 /* ------------------------------------------------------------------ setup */
 
@@ -49,7 +51,7 @@ const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const PASSWORD = 'local-demo-password';
+const PASSWORD = demoPassword();
 const cents = (dollars) => Math.round(dollars * 100);
 const pairKey = (a, b) => [a, b].sort().join('|');
 
@@ -510,9 +512,9 @@ async function seedAll() {
   /* ---- subscriptions ---------------------------------------------------- */
   // Never seeded before, so every environment opened /admin/subscriptions to
   // seven operators and no data, and the past-due warning had no way to be
-  // seen at all without editing the database by hand. Second Line is overdue on
-  // purpose. Pending Line is absent on purpose — an operator with no subscription
-  // row is a state the screens have to render too.
+  // seen at all without editing the database by hand. One operator is overdue
+  // on purpose. Another has no subscription row, which the screens also have
+  // to render.
   const slugToOperator = { ...operatorIdBySlug, [INCITY_OPERATOR.slug]: incityOp.id };
   let subscriptionCount = 0;
 
@@ -868,17 +870,17 @@ async function seedBookings({ passengerIds, ratingRows, redFlagRows, vouchersByO
   //
   // Random bookings almost never produce this, and it is the single most
   // useful row in the seed, so it is built on purpose.
-  const harbour = OPERATORS.find((o) => o.slug === 'harbour-line');
+  const showcaseOperator = OPERATORS.find((o) => o.showcase);
   const showcase = departures.find(
     (d) =>
-      d.operator_id === harbour?._runtime?.operatorId &&
+      d.operator_id === showcaseOperator?._runtime?.operatorId &&
       d.service_date > todayIso &&
       (stopsByRoute.get(d.route_id) ?? []).length >= 5 &&
       (load.get(d.id) ?? []).every((n) => !n),
   );
 
   if (!showcase) {
-    console.warn('  (no free Harbour departure found for the showcase scenario)');
+    console.warn('  (no free departure found for the showcase scenario)');
   } else {
     const stops = stopsByRoute.get(showcase.route_id);
     const routeFares = faresByRoute.get(showcase.route_id) ?? [];

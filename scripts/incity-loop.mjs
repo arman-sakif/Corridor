@@ -32,6 +32,8 @@
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 
+import { demoPassword } from './local-seed.mjs';
+
 const env = Object.fromEntries(
   readFileSync('.env.local', 'utf8')
     .split(/\r?\n/)
@@ -49,7 +51,7 @@ const admin = createClient(SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const DEMO_PASSWORD = 'local-demo-password';
+const DEMO_PASSWORD = demoPassword();
 const TEST_PASSWORD = 'incity-loop-password-123';
 
 let failures = 0;

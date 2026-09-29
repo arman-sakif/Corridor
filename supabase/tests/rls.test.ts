@@ -44,7 +44,7 @@ describe('what a signed-out visitor can see', () => {
     const visible = await test.asAnon<{ name: string }>(`select name from public.operators`);
     assert.deepEqual(
       visible.map((row) => row.name),
-      ["Harbour Line"],
+      ['Harbour Line'],
     );
   });
 

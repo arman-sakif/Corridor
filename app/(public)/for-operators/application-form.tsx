@@ -13,7 +13,7 @@ export function OperatorApplicationForm() {
   return (
     <form action={action} className="space-y-4">
       <Field label="Business name" error={fieldError(state, 'name')}>
-        <Input name="name" placeholder="Harbour Line" required />
+        <Input name="name" placeholder="Your business name" required />
       </Field>
 
       <Field
